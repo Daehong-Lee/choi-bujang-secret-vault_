@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { deploymentIdentity } from '../scripts/deployment-identity.mjs';
-import { runAttackChecks } from '../src/attack-check.mjs';
 
+const root = resolve(import.meta.dirname, '..');
 const config = {
   step: 1,
   judgeIssuer: 'https://aleph-judge-production.up.railway.app/defense/judge',
@@ -31,27 +33,15 @@ test('build identity uses Vercel Git and deployment metadata', () => {
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_COMMIT_SHA: 'short' }, config));
 });
 
-test('first attack check reads public data.json without credentials', async () => {
-  const originalFetch = globalThis.fetch;
-  let requestUrl;
-  let options;
-  try {
-    globalThis.fetch = async (url, init) => {
-      requestUrl = String(url);
-      options = init;
-      return new Response(JSON.stringify({ sampleMarker: 'SAMPLE_NOTE_1', notes: [{ title: '가상' }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    };
-    const [result] = await runAttackChecks(config);
-    assert.equal(requestUrl, 'https://student-defense.vercel.app/data.json');
-    assert.equal(options.redirect, 'error');
-    assert.match(result.observed, /확인 표시가 보임/u);
-    globalThis.fetch = async () => new Response('<html>not the data</html>', { status: 200 });
-    const [failed] = await runAttackChecks(config);
-    assert.match(failed.observed, /보이지 않음/u);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('source data remains in repository but is not part of static output', async () => {
+  const source = JSON.parse(await readFile(resolve(root, 'data.json'), 'utf8'));
+  assert.equal(Array.isArray(source.notes), true);
+  assert.equal(source.notes.length, 4);
+  await assert.rejects(readFile(resolve(root, 'public', 'data.json'), 'utf8'));
+});
+
+test('public page no longer requests the static data file', async () => {
+  const html = await readFile(resolve(root, 'public', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /fetch\(['"]\/data\.json['"]/u);
+  assert.match(html, /자료 보호 적용됨/u);
 });

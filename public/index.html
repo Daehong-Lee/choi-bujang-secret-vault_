@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 점령된 자료실</title>
+  <title>BYTE BACK | 자료 보호</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -20,33 +20,13 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 1단계 피해 확인</div>
-    <h1>점령된 자료실</h1>
-    <p>지금은 보호 장치가 없는 상태입니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">로그인하지 않은 방문자도 자료를 볼 수 있습니다. 공개 범위를 확인하고, 다음 제작 단계에서 접근을 차례로 막아 주세요.</div>
-    <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
+    <div class="eyebrow">BYTE BACK · 2단계 자료 보호</div>
+    <h1>보호된 자료실</h1>
+    <p>자료 원본은 저장소에 유지되지만 정적 공개 파일에서는 제거되었습니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
+    <div class="notice">비로그인 방문자는 더 이상 <code>/data.json</code>으로 원본 자료를 직접 읽을 수 없습니다. 다음 단계에서 허가된 요청만 자료를 받을 수 있도록 연결합니다.</div>
+    <ul aria-live="polite">
+      <li><strong>자료 보호 적용됨</strong><span>정적 공개 경로에서 가상 메모를 제거했습니다.</span></li>
+    </ul>
   </main>
-  <script type="module">
-    const list = document.querySelector('#notes');
-    try {
-      const response = await fetch('/data.json', { cache: 'no-store' });
-      if (!response.ok) throw new Error('공개 자료를 읽을 수 없습니다.');
-      const data = await response.json();
-      if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-      list.replaceChildren(...data.notes.map(note => {
-        const item = document.createElement('li');
-        const title = document.createElement('strong');
-        const content = document.createElement('span');
-        title.textContent = note.title;
-        content.textContent = note.content;
-        item.append(title, content);
-        return item;
-      }));
-    } catch (error) {
-      const item = document.createElement('li');
-      item.textContent = error.message;
-      list.replaceChildren(item);
-    }
-  </script>
 </body>
 </html>
