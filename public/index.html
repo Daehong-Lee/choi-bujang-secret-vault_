@@ -23,10 +23,37 @@
     <div class="eyebrow">BYTE BACK · 2단계 자료 보호</div>
     <h1>보호된 자료실</h1>
     <p>자료 원본은 저장소에 유지되지만 정적 공개 파일에서는 제거되었습니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">비로그인 방문자는 더 이상 <code>/data.json</code>으로 원본 자료를 직접 읽을 수 없습니다. 다음 단계에서 허가된 요청만 자료를 받을 수 있도록 연결합니다.</div>
-    <ul aria-live="polite">
-      <li><strong>자료 보호 적용됨</strong><span>정적 공개 경로에서 가상 메모를 제거했습니다.</span></li>
+    <div class="notice">자료는 더 이상 <code>/data.json</code>으로 정적으로 공개되지 않습니다. 다음 단계에서 허가된 요청만 자료를 받을 수 있도록 연결합니다.</div>
+    <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨</div>
+    <ul id="notes" aria-live="polite">
+      <li><strong>자료 불러오는 중</strong><span>서버 함수를 통해 보호된 자료를 확인합니다.</span></li>
     </ul>
+    <script>
+      const notes = document.getElementById('notes');
+      fetch('/api/notes', { credentials: 'same-origin' })
+        .then((response) => {
+          if (!response.ok) throw new Error('request failed');
+          return response.json();
+        })
+        .then(({ notes: items }) => {
+          notes.replaceChildren();
+          for (const item of items) {
+            const li = document.createElement('li');
+            const title = document.createElement('strong');
+            const content = document.createElement('span');
+            title.textContent = item.title;
+            content.textContent = item.content;
+            li.append(title, content);
+            notes.append(li);
+          }
+        })
+        .catch(() => {
+          notes.replaceChildren();
+          const li = document.createElement('li');
+          li.textContent = '자료를 불러오지 못했습니다.';
+          notes.append(li);
+        });
+    </script>
   </main>
 </body>
 </html>

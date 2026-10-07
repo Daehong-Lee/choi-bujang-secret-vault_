@@ -23,3 +23,20 @@
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
+
+## 2단계 자료 조회 함수
+
+2단계에서는 가상 메모를 Supabase의 `public.learning_notes` 테이블에 보관하고, Vercel의 `api/notes.js` 서버 함수가 `SUPABASE_URL`과 서버 전용 `SUPABASE_SECRET_KEY` 환경변수로 자료를 조회합니다. 이 두 키는 브라우저 코드, HTTP 응답, 로그에 포함하지 않습니다. `learning_notes`의 RLS는 켜져 있으며 `anon`과 `authenticated`에는 직접 `SELECT` 권한을 주지 않습니다.
+
+현재 `/api/notes` 함수 자체는 공개 Vercel 주소이므로 인증 없이 호출할 수 있다는 약점이 남아 있습니다. 다음 방어 단계에서 이 공개 API 접근을 보호해야 합니다.
+
+### Vercel 환경변수 설정
+
+Supabase 대시보드에서 프로젝트의 URL을 확인하고 서버 전용 Secret Key를 발급한 뒤, Vercel 프로젝트의 **Settings → Environment Variables**에 다음 두 변수만 등록합니다.
+
+- `SUPABASE_URL` — Supabase 프로젝트 URL
+- `SUPABASE_SECRET_KEY` — 서버 전용 Secret Key
+
+두 값은 **Production**과 실제 배포에 사용할 환경에 등록합니다. Secret Key 값 자체는 GitHub, 브라우저 코드, `aleph.config.json`, README, API 응답 또는 로그에 넣지 않습니다.
+
+환경변수를 추가하거나 변경한 뒤에는 새 배포가 필요합니다. SQL Editor에서는 `supabase/migrate_virtual_notes.sql`을 실행해 `learning_notes` 테이블과 가상 메모 네 건을 준비합니다.
