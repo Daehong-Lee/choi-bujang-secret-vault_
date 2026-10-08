@@ -50,8 +50,9 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('learning_notes')
-        .select('id, title, body')
+        .select('id, title, body, owner_id')
         .eq('id', id)
+        .eq('owner_id', identity.userId)
         .maybeSingle();
 
       if (error) return json(res, 500, { error: '자료를 불러오지 못했습니다.' });
@@ -68,17 +69,33 @@ export default async function handler(req, res) {
         return json(res, 400, { error: 'body가 필요합니다.' });
       }
 
-      // 3단계에서는 로그인만 확인하고 owner_id를 조건으로 쓰지 않습니다.
-      // 다른 사용자의 id를 알고 있으면 수정할 수 있으며, 이 허점은 4단계에서 보완합니다.
+      const { data: existing, error: existingError } = await supabase
+        .from('learning_notes')
+        .select('id, owner_id')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (existingError) return json(res, 500, { error: '자료 소유자를 확인하지 못했습니다.' });
+      if (!existing || existing.owner_id !== identity.userId) {
+        return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
+      }
+
       const { data, error } = await supabase
         .from('learning_notes')
-        .update({ title: input.title, body: input.body })
+        .update({
+          title: input.title,
+          body: input.body,
+          owner_id: identity.userId
+        })
         .eq('id', id)
-        .select('id, title, body')
+        .eq('owner_id', identity.userId)
+        .select('id, title, body, owner_id')
         .maybeSingle();
 
       if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.' });
-      if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
+      if (!data || data.owner_id !== identity.userId) {
+        return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
+      }
       return json(res, 200, noteView(data));
     }
 
@@ -86,6 +103,7 @@ export default async function handler(req, res) {
       .from('learning_notes')
       .delete()
       .eq('id', id)
+      .eq('owner_id', identity.userId)
       .select('id')
       .maybeSingle();
 
