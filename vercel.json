@@ -1,17 +1,12 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "buildCommand": "npm run build",
-  "outputDirectory": "public",
-  "headers": [
+  "rewrites": [
     {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
-      ]
+      "source": "/aleph.json",
+      "destination": "/aleph.json"
+    },
+    {
+      "source": "/((?!api/|aleph\\.json$).*)",
+      "destination": "/index.html"
     }
   ]
 }
