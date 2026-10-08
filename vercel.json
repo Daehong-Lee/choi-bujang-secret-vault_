@@ -1,12 +1,6 @@
 {
-  "rewrites": [
-    {
-      "source": "/aleph.json",
-      "destination": "/aleph.json"
-    },
-    {
-      "source": "/((?!api/|aleph\\.json$).*)",
-      "destination": "/index.html"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "public"
 }
