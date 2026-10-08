@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 자료 보호</title>
+  <title>BYTE BACK | 내 자료실</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -18,7 +18,10 @@
     li span { color: #bfd0e5; }
     .auth { margin: 26px 0; padding: 20px; border: 1px solid #51667c; border-radius: 14px; background: #152235; }
     .auth label { display: block; margin: 12px 0 6px; font-weight: 700; }
-    .auth input { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #51667c; border-radius: 9px; background: #0f1927; color: #ecf4ff; }
+    .auth input, .auth textarea { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #51667c; border-radius: 9px; background: #0f1927; color: #ecf4ff; }
+    .auth textarea { resize: vertical; }
+    li > div { margin-top: 12px; }
+    li > div button { margin-right: 8px; padding: 7px 11px; border: 0; border-radius: 8px; cursor: pointer; }
     .auth button { margin-top: 14px; margin-right: 8px; padding: 10px 14px; border: 0; border-radius: 9px; cursor: pointer; }
     .auth-message { min-height: 1.5em; margin-top: 12px; color: #bfd0e5; }
     .auth-message[data-error="true"] { color: #ffb7c2; }
@@ -27,11 +30,11 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 2단계 자료 보호</div>
-    <h1>보호된 자료실</h1>
+    <div class="eyebrow">BYTE BACK · 3단계 내 자료실</div>
+    <h1>로그인 자료실</h1>
     <p>자료 원본은 저장소에 유지되지만 정적 공개 파일에서는 제거되었습니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
-    <div class="notice">자료는 더 이상 <code>/data.json</code>으로 정적으로 공개되지 않습니다. 다음 단계에서 허가된 요청만 자료를 받을 수 있도록 연결합니다.</div>
-    <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨</div>
+    <div class="notice">자료는 더 이상 <code>/data.json</code>으로 정적으로 공개되지 않습니다. 로그인한 사용자의 토큰을 서버에서 검사한 뒤 자료 API를 호출합니다.</div>
+    <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨 · 로그인 검증 적용됨 · 소유자 검사는 4단계에서 적용</div>
 
     <section class="auth" aria-labelledby="auth-title">
       <h2 id="auth-title">자료실 로그인</h2>
@@ -46,34 +49,166 @@
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <div id="auth-message" class="auth-message" aria-live="polite"></div>
     </section>
+
+    <section id="note-editor" class="auth" aria-labelledby="note-editor-title" hidden>
+      <h2 id="note-editor-title">가상 메모 추가</h2>
+      <form id="note-form">
+        <input id="note-id" type="hidden">
+        <label for="note-title">제목</label>
+        <input id="note-title" name="title" type="text" maxlength="200" required>
+        <label for="note-body">내용</label>
+        <textarea id="note-body" name="body" rows="5" maxlength="5000" required></textarea>
+        <button id="note-save-button" type="submit">메모 추가</button>
+        <button id="note-cancel-button" type="button" hidden>수정 취소</button>
+      </form>
+      <div id="note-message" class="auth-message" aria-live="polite"></div>
+    </section>
     <ul id="notes" aria-live="polite">
       <li><strong>자료 불러오는 중</strong><span>서버 함수를 통해 보호된 자료를 확인합니다.</span></li>
     </ul>
-    <script>
+    <script type="module">
+      import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
+      import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './auth-config.js';
+
       const notes = document.getElementById('notes');
-      fetch('/api/notes', { credentials: 'same-origin' })
-        .then((response) => {
-          if (!response.ok) throw new Error('request failed');
-          return response.json();
-        })
-        .then(({ notes: items }) => {
+      const editor = document.getElementById('note-editor');
+      const form = document.getElementById('note-form');
+      const idInput = document.getElementById('note-id');
+      const titleInput = document.getElementById('note-title');
+      const bodyInput = document.getElementById('note-body');
+      const saveButton = document.getElementById('note-save-button');
+      const cancelButton = document.getElementById('note-cancel-button');
+      const message = document.getElementById('note-message');
+      const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+      function showMessage(text, error = false) {
+        message.textContent = text;
+        message.dataset.error = error ? 'true' : 'false';
+      }
+
+      function resetEditor() {
+        form.reset();
+        idInput.value = '';
+        saveButton.textContent = '메모 추가';
+        cancelButton.hidden = true;
+        showMessage('');
+      }
+
+      function startEdit(note) {
+        idInput.value = note.id;
+        titleInput.value = note.title;
+        bodyInput.value = note.body;
+        saveButton.textContent = '메모 수정';
+        cancelButton.hidden = false;
+        editor.hidden = false;
+        titleInput.focus();
+      }
+
+      async function apiRequest(path, options = {}) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('로그인이 필요합니다.');
+
+        const headers = new Headers(options.headers || {});
+        headers.set('Authorization', `Bearer ${session.access_token}`);
+        if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+
+        const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+        const body = response.status === 204 ? null : await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body?.error || '자료 요청에 실패했습니다.');
+        return body;
+      }
+
+      async function loadNotes() {
+        notes.replaceChildren();
+        const loading = document.createElement('li');
+        loading.textContent = '자료 불러오는 중';
+        notes.append(loading);
+
+        try {
+          const items = await apiRequest('/api/notes');
           notes.replaceChildren();
+          if (!items.length) {
+            const empty = document.createElement('li');
+            empty.textContent = '내 메모가 없습니다. 위에서 첫 가상 메모를 추가하세요.';
+            notes.append(empty);
+            return;
+          }
+
           for (const item of items) {
             const li = document.createElement('li');
             const title = document.createElement('strong');
             const content = document.createElement('span');
+            const actions = document.createElement('div');
+            const edit = document.createElement('button');
+            const remove = document.createElement('button');
             title.textContent = item.title;
-            content.textContent = item.content;
-            li.append(title, content);
+            content.textContent = item.body;
+            edit.type = 'button';
+            edit.textContent = '수정';
+            remove.type = 'button';
+            remove.textContent = '삭제';
+            edit.addEventListener('click', () => startEdit(item));
+            remove.addEventListener('click', async () => {
+              if (!confirm('이 가상 메모를 삭제할까요?')) return;
+              try {
+                await apiRequest(`/api/notes/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+                resetEditor();
+                await loadNotes();
+              } catch (error) {
+                showMessage(error.message, true);
+              }
+            });
+            actions.append(edit, remove);
+            li.append(title, content, actions);
             notes.append(li);
           }
-        })
-        .catch(() => {
+        } catch (error) {
           notes.replaceChildren();
           const li = document.createElement('li');
-          li.textContent = '자료를 불러오지 못했습니다.';
+          li.textContent = error.message;
           notes.append(li);
-        });
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        saveButton.disabled = true;
+        showMessage(idInput.value ? '수정 중입니다.' : '추가 중입니다.');
+        try {
+          const payload = { title: titleInput.value.trim(), body: bodyInput.value };
+          if (idInput.value) {
+            await apiRequest(`/api/notes/${encodeURIComponent(idInput.value)}`, {
+              method: 'PUT',
+              body: JSON.stringify(payload)
+            });
+            showMessage('메모가 수정되었습니다.');
+          } else {
+            const created = await apiRequest('/api/notes', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+            showMessage(`메모가 추가되었습니다. id: ${created.id}`);
+          }
+          resetEditor();
+          await loadNotes();
+        } catch (error) {
+          showMessage(error.message, true);
+        } finally {
+          saveButton.disabled = false;
+        }
+      });
+
+      cancelButton.addEventListener('click', resetEditor);
+
+      supabase.auth.onAuthStateChange((_event, session) => {
+        editor.hidden = !session;
+        if (!session) resetEditor();
+        loadNotes();
+      });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      editor.hidden = !session;
+      await loadNotes();
     </script>
     <script type="module" src="/auth.js"></script>
   </main>
