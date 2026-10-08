@@ -5,9 +5,9 @@
   "sampleMarker": "SAMPLE_NOTE_1",
   "judgeIssuer": "https://aleph-judge-production.up.railway.app/defense/judge",
   "identityProvider": {
-    "issuer": "https://zmflqjokomjuzhuhdrr.supabase.co/auth/v1",
+    "issuer": "https://zmflojkomojuzhuhrdrr.supabase.co/auth/v1",
     "audience": "authenticated",
-    "jwksUrl": "https://zmflqjokomjuzhuhdrr.supabase.co/auth/v1/.well-known/jwks.json"
+    "jwksUrl": "https://zmflojkomojuzhuhrdrr.supabase.co/auth/v1/.well-known/jwks.json"
   },
   "originalApiUrl": "https://zmflojkomojuzhuhrdrr.supabase.co/rest/v1/learning_notes",
   "restoreRoute": null
