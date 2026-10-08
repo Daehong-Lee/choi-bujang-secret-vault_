@@ -16,6 +16,13 @@
     li { border: 1px solid #51667c; border-radius: 14px; padding: 17px 19px; background: #1a2a3d; }
     strong { display: block; font-size: 18px; margin-bottom: 5px; }
     li span { color: #bfd0e5; }
+    .auth { margin: 26px 0; padding: 20px; border: 1px solid #51667c; border-radius: 14px; background: #152235; }
+    .auth label { display: block; margin: 12px 0 6px; font-weight: 700; }
+    .auth input { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid #51667c; border-radius: 9px; background: #0f1927; color: #ecf4ff; }
+    .auth button { margin-top: 14px; margin-right: 8px; padding: 10px 14px; border: 0; border-radius: 9px; cursor: pointer; }
+    .auth-message { min-height: 1.5em; margin-top: 12px; color: #bfd0e5; }
+    .auth-message[data-error="true"] { color: #ffb7c2; }
+    .auth-status { margin: 0 0 8px; color: #8ad8df; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -25,6 +32,20 @@
     <p>자료 원본은 저장소에 유지되지만 정적 공개 파일에서는 제거되었습니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
     <div class="notice">자료는 더 이상 <code>/data.json</code>으로 정적으로 공개되지 않습니다. 다음 단계에서 허가된 요청만 자료를 받을 수 있도록 연결합니다.</div>
     <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨</div>
+
+    <section class="auth" aria-labelledby="auth-title">
+      <h2 id="auth-title">자료실 로그인</h2>
+      <p id="auth-status" class="auth-status">로그인 상태를 확인하는 중입니다.</p>
+      <form id="login-form">
+        <label for="login-email">이메일</label>
+        <input id="login-email" name="email" type="email" autocomplete="username" required>
+        <label for="login-password">비밀번호</label>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        <button id="login-button" type="submit">로그인</button>
+      </form>
+      <button id="logout-button" type="button" hidden>로그아웃</button>
+      <div id="auth-message" class="auth-message" aria-live="polite"></div>
+    </section>
     <ul id="notes" aria-live="polite">
       <li><strong>자료 불러오는 중</strong><span>서버 함수를 통해 보호된 자료를 확인합니다.</span></li>
     </ul>
@@ -54,6 +75,7 @@
           notes.append(li);
         });
     </script>
+    <script type="module" src="/auth.js"></script>
   </main>
 </body>
 </html>

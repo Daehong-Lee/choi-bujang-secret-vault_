@@ -125,3 +125,18 @@ done
 - **과거 배포:** 이전 Vercel 배포에 `/data.json` 또는 공개 자료가 남아 있었는지 별도로 확인한다.
 
 따라서 현재 배포와 최신 GitHub 파일의 검색 결과가 깨끗하더라도, **옛 공개 커밋이나 옛 배포가 남아 있다면 "과거 노출 해소"라고 표현하지 않습니다.**
+
+### Supabase Auth 로그인 화면
+
+자료실 화면에는 Supabase 공식 JavaScript SDK의 이메일·비밀번호 로그인과 현재 세션 로그아웃을 연결합니다. 브라우저에서는 **Project URL과 Publishable Key만** 사용하며, 비밀번호를 직접 검증하거나 JWT를 직접 생성하지 않습니다. 로그인은 `supabase.auth.signInWithPassword()`로, 로그아웃은 `supabase.auth.signOut({ scope: 'local' })`로 처리합니다.
+
+`public/auth-config.js`의 다음 두 값에 Supabase 대시보드에서 확인한 공개용 값을 넣습니다.
+
+```js
+export const SUPABASE_URL = '[ ]';
+export const SUPABASE_PUBLISHABLE_KEY = '[ ]';
+```
+
+`SUPABASE_SECRET_KEY`는 이 파일이나 다른 브라우저 파일에 넣지 않습니다. 로그인 실패 시 Supabase가 반환한 오류 이유를 화면에 표시합니다.
+
+현재 단계에서 이 로그인 화면을 추가했다고 해서 `/api/notes`가 자동으로 인증 보호되는 것은 아닙니다. `/api/notes`는 여전히 공개 Vercel 함수라는 기존 약점이 있으므로, API 자체의 인증·인가 보호는 별도 단계에서 구현해야 합니다.
