@@ -9,6 +9,6 @@
     "audience": "authenticated",
     "jwksUrl": "https://zmflqjokomjuzhuhdrr.supabase.co/auth/v1/.well-known/jwks.json"
   },
-  "originalApiUrl": "https://zmflqjokomjuzhuhdrr.supabase.co/rest/v1/learning_notes",
+  "originalApiUrl": "https://zmflojkomojuzhuhrdrr.supabase.co/rest/v1/learning_notes",
   "restoreRoute": null
 }
