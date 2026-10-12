@@ -13,12 +13,12 @@ if (!Array.isArray(data.notes)) {
 }
 await mkdir(resolve(root, 'public'), { recursive: true });
 
-if (!process.argv.includes('--local') && config.step === 1) {
+if (!process.argv.includes('--local')) {
   const { deploymentIdentity } = await import('./deployment-identity.mjs');
   const identity = deploymentIdentity(process.env, config);
   await writeFile(resolve(root, 'public', 'aleph.json'),
     `${JSON.stringify(identity, null, 2)}\n`, 'utf8');
-  console.log('배포 저장소·커밋·주소를 public/aleph.json에 기록했습니다.');
+  console.log(`배포 저장소·커밋·주소를 public/aleph.json에 기록했습니다 (step ${identity.step}).`);
 }
 
 console.log('원본 data.json은 유지하고 public/data.json 정적 배포는 비활성화했습니다.');
