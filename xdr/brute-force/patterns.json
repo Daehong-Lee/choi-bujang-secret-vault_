@@ -1,0 +1,32 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "brute-force",
+  "basis": {
+    "framework": "MITRE ATT&CK",
+    "techniqueId": "T1110",
+    "name": "Brute Force",
+    "url": "https://attack.mitre.org/techniques/T1110/"
+  },
+  "patterns": [
+    {
+      "id": "BF-01",
+      "name": "단일 출발 주소의 단시간 로그인 실패 집중",
+      "conditions": [
+        "인증 실패 이벤트가 짧은 시간 창에 반복 발생한다.",
+        "해당 이벤트들의 출발 주소(srcip)가 동일하다.",
+        "탐지 임계값과 시간 창은 환경의 정상 로그인량에 맞춰 별도 설정한다."
+      ],
+      "evidence": "MITRE ATT&CK T1110은 반복적인 비밀번호 추측을 무차별 대입으로 설명하며, T1110.001은 반복적인 인증 실패를 동반할 수 있다고 명시한다."
+    },
+    {
+      "id": "BF-02",
+      "name": "여러 계정 대상 동일 비밀번호 시도(Password Spraying)",
+      "conditions": [
+        "짧은 시간 창에 서로 다른 여러 계정에서 인증 실패가 발생한다.",
+        "이벤트의 출발 주소가 같거나 동일한 공격 흐름으로 상관분석된다.",
+        "로그에 비밀번호 원문을 저장하지 않고, 사용 가능한 경우에만 안전한 동일값 지표로 같은 비밀번호 사용을 확인한다."
+      ],
+      "evidence": "MITRE ATT&CK T1110.003은 하나 또는 소수의 흔한 비밀번호를 여러 계정에 시도하는 Password Spraying으로 정의한다."
+    }
+  ]
+}
