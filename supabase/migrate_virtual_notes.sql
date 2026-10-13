@@ -4,6 +4,7 @@
 create table if not exists public.learning_notes (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid,
+  resource_type text not null default 'memo' check (resource_type in ('memo', 'announcement')),
   title text not null,
   body text not null
 );
@@ -37,6 +38,29 @@ begin
     alter table public.learning_notes alter column id drop default;
     alter table public.learning_notes alter column id type uuid using gen_random_uuid();
     alter table public.learning_notes alter column id set default gen_random_uuid();
+  end if;
+end
+$$;
+
+
+-- 8단계: 기존 메모는 그대로 메모로 유지하고, 공지와는 자원 유형으로 구분합니다.
+-- 기존 주소와 UUID는 변경하지 않습니다.
+alter table public.learning_notes
+  add column if not exists resource_type text not null default 'memo';
+update public.learning_notes set resource_type = 'memo' where resource_type is null;
+alter table public.learning_notes
+  alter column resource_type set default 'memo',
+  alter column resource_type set not null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.learning_notes'::regclass
+      and conname = 'learning_notes_resource_type_check'
+  ) then
+    alter table public.learning_notes
+      add constraint learning_notes_resource_type_check
+      check (resource_type in ('memo', 'announcement'));
   end if;
 end
 $$;

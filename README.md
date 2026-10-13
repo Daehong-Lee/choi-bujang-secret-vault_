@@ -30,6 +30,14 @@
 
 현재 `/api/notes` 함수 자체는 공개 Vercel 주소이므로 인증 없이 호출할 수 있다는 약점이 남아 있습니다. 다음 방어 단계에서 이 공개 API 접근을 보호해야 합니다.
 
+### 8단계: 메모와 강사 공지 자원 구분
+
+- `learning_notes.resource_type`으로 `memo`와 `announcement`를 구분합니다. 기존 행은 `memo`로 유지하며 기존 UUID와 `/api/notes` 및 `/api/notes/[id]` 주소는 바꾸지 않습니다.
+- 메모 API는 `resource_type=memo`인 자료만 조회·수정·삭제합니다. 강사 공지는 `/api/announcements` 및 `/api/announcements/[id]`에서 다루며, 모든 응답에 UUID `id`와 `resourceType`을 포함합니다.
+- 공지 조회는 로그인한 사용자에게 허용하고, 공지 등록·수정·삭제는 검증된 `judge` 신원만 허용합니다. 새 API는 기존 화면 메뉴에 연결하지 않았습니다.
+- 적용 전에 SQL Editor에서 `supabase/migrate_virtual_notes.sql`을 실행합니다. 이 변경은 실제 DB에 자동 적용하지 않습니다.
+
+
 ### Vercel 환경변수 설정
 
 Supabase 대시보드에서 프로젝트의 URL을 확인하고 서버 전용 Secret Key를 발급한 뒤, Vercel 프로젝트의 **Settings → Environment Variables**에 다음 두 변수만 등록합니다.

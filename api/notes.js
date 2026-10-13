@@ -25,7 +25,7 @@ function validUuid(value) {
 }
 
 function noteView(note) {
-  return { id: note.id, title: note.title, body: note.body };
+  return { id: note.id, resourceType: note.resource_type ?? 'memo', title: note.title, body: note.body };
 }
 
 export default async function handler(req, res) {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
 
   const identity = await verifyLoginAuthorization(req.headers.authorization);
   if (!identity?.userId) {
-    return json(res, 401, { error: '로그인이 필요하거나 로그인 검증에 실패했습니다.' });
+    return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   }
 
   try {
@@ -47,7 +47,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('learning_notes')
-        .select('id, title, body')
+        .select('id, resource_type, title, body')
+        .eq('resource_type', 'memo')
         .eq('owner_id', identity.userId)
         .order('id', { ascending: true });
 
@@ -67,6 +68,7 @@ export default async function handler(req, res) {
 
     const { error } = await supabase.from('learning_notes').insert({
       id,
+      resource_type: 'memo',
       owner_id: identity.userId,
       title: input.title,
       body: input.body
@@ -77,7 +79,7 @@ export default async function handler(req, res) {
       return json(res, 500, { error: '자료를 추가하지 못했습니다.' });
     }
 
-    return json(res, 201, { id });
+    return json(res, 201, { id, resourceType: 'memo' });
   } catch (error) {
     if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
     return json(res, 500, { error: '자료를 처리하지 못했습니다.' });

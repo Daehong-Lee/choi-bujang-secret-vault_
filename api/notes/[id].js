@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { createClient } from '@supabase/supabase-js';
+import { authorizeMemoOwner } from '../../src/resource-access.mjs';
 
 const root = process.cwd();
 const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
@@ -25,7 +26,7 @@ function validUuid(value) {
 }
 
 function noteView(note) {
-  return { id: note.id, title: note.title, body: note.body };
+  return { id: note.id, resourceType: note.resource_type ?? 'memo', title: note.title, body: note.body };
 }
 
 export default async function handler(req, res) {
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
 
   const identity = await verifyLoginAuthorization(req.headers.authorization);
   if (!identity?.userId) {
-    return json(res, 401, { error: '로그인이 필요하거나 로그인 검증에 실패했습니다.' });
+    return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   }
 
   const id = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
@@ -50,13 +51,15 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { data, error } = await supabase
         .from('learning_notes')
-        .select('id, title, body, owner_id')
+        .select('id, resource_type, title, body, owner_id')
         .eq('id', id)
+        .eq('resource_type', 'memo')
         .eq('owner_id', identity.userId)
         .maybeSingle();
 
-      if (error) return json(res, 500, { error: '자료를 불러오지 못했습니다.' });
-      if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
+      if (error) return json(res, 500, { error: '자료를 불러오지 못했습니다.', reason: 'RESOURCE_READ_FAILED' });
+      const access = authorizeMemoOwner(identity, data);
+      if (!access.allowed) return json(res, access.status, { error: '자료를 찾을 수 없습니다.', reason: access.reason });
       return json(res, 200, noteView(data));
     }
 
@@ -71,31 +74,29 @@ export default async function handler(req, res) {
 
       const { data: existing, error: existingError } = await supabase
         .from('learning_notes')
-        .select('id, owner_id')
+        .select('id, resource_type, owner_id')
         .eq('id', id)
         .maybeSingle();
 
-      if (existingError) return json(res, 500, { error: '자료 소유자를 확인하지 못했습니다.' });
-      if (!existing || existing.owner_id !== identity.userId) {
-        return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
-      }
+      if (existingError) return json(res, 500, { error: '자료 소유자를 확인하지 못했습니다.', reason: 'OWNER_CHECK_FAILED' });
+      const access = authorizeMemoOwner(identity, existing);
+      if (!access.allowed) return json(res, access.status, { error: '자료를 찾을 수 없습니다.', reason: access.reason });
 
       const { data, error } = await supabase
         .from('learning_notes')
         .update({
           title: input.title,
-          body: input.body,
-          owner_id: identity.userId
+          body: input.body
         })
         .eq('id', id)
         .eq('owner_id', identity.userId)
-        .select('id, title, body, owner_id')
+        .select('id, resource_type, title, body, owner_id')
+        .eq('resource_type', 'memo')
         .maybeSingle();
 
-      if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.' });
-      if (!data || data.owner_id !== identity.userId) {
-        return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
-      }
+      if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.', reason: 'RESOURCE_UPDATE_FAILED' });
+      const updatedAccess = authorizeMemoOwner(identity, data);
+      if (!updatedAccess.allowed) return json(res, updatedAccess.status, { error: '자료를 찾을 수 없습니다.', reason: updatedAccess.reason });
       return json(res, 200, noteView(data));
     }
 
@@ -103,12 +104,13 @@ export default async function handler(req, res) {
       .from('learning_notes')
       .delete()
       .eq('id', id)
+      .eq('resource_type', 'memo')
       .eq('owner_id', identity.userId)
       .select('id')
       .maybeSingle();
 
-    if (error) return json(res, 500, { error: '자료를 삭제하지 못했습니다.' });
-    if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.' });
+    if (error) return json(res, 500, { error: '자료를 삭제하지 못했습니다.', reason: 'RESOURCE_DELETE_FAILED' });
+    if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
     return res.status(204).end();
   } catch (error) {
     if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });

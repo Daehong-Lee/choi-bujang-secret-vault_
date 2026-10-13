@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 // Local practice requests use the engine's public input shape. The judge sends and times its own events.
 const request = (signals, recentEvents) => ({
   schema: 'aleph.decision.v1', requestId: randomUUID(), classId: 'class_fixture',
-  projectId: 'project_fixture', subjectId: 'learner_fixture', deviceId: 'a'.repeat(16),
-  service: 'notes', method: 'GET', path: '/notes/demo', route: 'GET /notes/:id',
+  projectId: 'project_fixture', subjectId: 'learner_fixture', resourceOwnerSubjectId: 'learner_fixture',
+  actorRole: 'student', deviceId: 'a'.repeat(16),
+  service: 'notes', method: 'GET', path: '/notes/11111111-1111-4111-8111-111111111111', route: 'GET /notes/:id',
   queryLength: 0, querySha256: createHash('sha256').update('').digest('hex'),
   at: new Date().toISOString(), policyRevision: 1, deviceRegistered: true,
   stepUp: { verified: false, authAgeSeconds: null }, recentEvents, signals,

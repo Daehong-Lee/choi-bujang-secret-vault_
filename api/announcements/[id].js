@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { createClient } from '@supabase/supabase-js';
+import { authorizeAnnouncementWrite } from '../../src/resource-access.mjs';
 
 const root = process.cwd();
 const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
@@ -36,7 +37,7 @@ export default async function handler(req, res) {
 
   const identity = await verifyLoginAuthorization(req.headers.authorization);
   if (!identity?.userId) {
-    return json(res, 401, { error: '로그인이 필요하거나 로그인 검증에 실패했습니다.' });
+    return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   }
 
   const id = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
@@ -55,13 +56,13 @@ export default async function handler(req, res) {
         .eq('resource_type', 'announcement')
         .maybeSingle();
 
-      if (error) return json(res, 500, { error: '강사 공지를 불러오지 못했습니다.' });
-      if (!data) return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.' });
+      if (error) return json(res, 500, { error: '강사 공지를 불러오지 못했습니다.', reason: 'RESOURCE_READ_FAILED' });
+      if (!data) return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND' });
       return json(res, 200, noteView(data));
     }
 
     if (req.method === 'PUT') {
-      if (identity.kind !== 'judge') return json(res, 403, { error: '강사 공지는 강사 권한으로만 수정할 수 있습니다.' });
+      if (identity.kind !== 'judge') return json(res, 403, { error: '강사 권한이 필요합니다.', reason: 'INSTRUCTOR_REQUIRED' });
       const input = parseBody(req);
       if (typeof input.title !== 'string' || !input.title.trim()) {
         return json(res, 400, { error: 'title이 필요합니다.' });
@@ -76,17 +77,15 @@ export default async function handler(req, res) {
         .eq('id', id)
         .maybeSingle();
 
-      if (existingError) return json(res, 500, { error: '자료 소유자를 확인하지 못했습니다.' });
-      if (identity.kind !== 'judge' || !existing || existing.resource_type !== 'announcement' || existing.owner_id !== identity.userId) {
-        return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.' });
-      }
+      if (existingError) return json(res, 500, { error: '자료 소유자를 확인하지 못했습니다.', reason: 'OWNER_CHECK_FAILED' });
+      const access = authorizeAnnouncementWrite(identity, existing);
+      if (!access.allowed) return json(res, access.status, { error: '강사 공지를 찾을 수 없습니다.', reason: access.reason });
 
       const { data, error } = await supabase
         .from('learning_notes')
         .update({
           title: input.title,
-          body: input.body,
-          owner_id: identity.userId
+          body: input.body
         })
         .eq('id', id)
         .eq('owner_id', identity.userId)
@@ -94,14 +93,13 @@ export default async function handler(req, res) {
         .eq('resource_type', 'announcement')
         .maybeSingle();
 
-      if (error) return json(res, 500, { error: '강사 공지를 수정하지 못했습니다.' });
-      if (!data || data.owner_id !== identity.userId) {
-        return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.' });
-      }
+      if (error) return json(res, 500, { error: '강사 공지를 수정하지 못했습니다.', reason: 'RESOURCE_UPDATE_FAILED' });
+      const updatedAccess = authorizeAnnouncementWrite(identity, data);
+      if (!updatedAccess.allowed) return json(res, updatedAccess.status, { error: '강사 공지를 찾을 수 없습니다.', reason: updatedAccess.reason });
       return json(res, 200, noteView(data));
     }
 
-    if (identity.kind !== 'judge') return json(res, 403, { error: '강사 공지는 강사 권한으로만 삭제할 수 있습니다.' });
+    if (identity.kind !== 'judge') return json(res, 403, { error: '강사 권한이 필요합니다.', reason: 'INSTRUCTOR_REQUIRED' });
 
     const { data, error } = await supabase
       .from('learning_notes')
@@ -112,8 +110,8 @@ export default async function handler(req, res) {
       .select('id')
       .maybeSingle();
 
-    if (error) return json(res, 500, { error: '강사 공지를 삭제하지 못했습니다.' });
-    if (!data) return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.' });
+    if (error) return json(res, 500, { error: '강사 공지를 삭제하지 못했습니다.', reason: 'RESOURCE_DELETE_FAILED' });
+    if (!data) return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
     return res.status(204).end();
   } catch (error) {
     if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
