@@ -20,13 +20,16 @@ function hasValidRequestShape(request) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) return false;
   if (Object.keys(request).sort().join(',') !== REQUEST_KEYS) return false;
   if (request.schema !== 'aleph.decision.v1'
-      || typeof request.requestId !== 'string'
+      || typeof request.requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(request.requestId)
       || typeof request.subjectId !== 'string' || !request.subjectId
       || typeof request.resourceOwnerSubjectId !== 'string' || !request.resourceOwnerSubjectId
       || !['student', 'instructor'].includes(request.actorRole)
       || typeof request.deviceId !== 'string' || !/^[0-9a-f]{16}$/u.test(request.deviceId)
       || !Number.isInteger(request.queryLength) || request.queryLength !== 0
       || typeof request.querySha256 !== 'string' || !/^[0-9a-f]{64}$/u.test(request.querySha256)
+      || typeof request.at !== 'string'
+      || !Number.isFinite(Date.parse(request.at))
+      || Math.abs(Date.now() - Date.parse(request.at)) > 5000
       || typeof request.path !== 'string'
       || typeof request.route !== 'string'
       || typeof request.method !== 'string'
@@ -81,9 +84,13 @@ function allow(request, ruleIds) {
 export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
-  // Exact route matching only. Resource selection is the UUID path segment, never a query flag.
-  const idPath = /^\/(notes|announcements)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu.exec(request.path);
-  const collectionPath = request.path === '/notes' && request.method === 'GET'
+  // Exact route matching only. Accept the app's /api prefix as an exact alias;
+  // no other prefix, suffix, query-selected resource, or extra path segment is allowed.
+  const canonicalPath = request.path.startsWith('/api/') ? request.path.slice(4) : request.path;
+  if (request.at && (!Number.isFinite(Date.parse(request.at))
+      || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
+  const idPath = /^\/(notes|announcements)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu.exec(canonicalPath);
+  const collectionPath = canonicalPath === '/notes' && request.method === 'GET'
     && request.service === 'notes' && request.route === 'GET /notes';
   const expectedRoute = idPath
     ? `${request.method} /${idPath[1].toLowerCase()}/:id`
@@ -91,15 +98,15 @@ export async function decide(request) {
   const routeMatches = idPath
     && request.route === expectedRoute
     && ((idPath[1].toLowerCase() === 'notes' && request.service === 'notes'
-        && ['GET', 'PUT'].includes(request.method))
+        && ['GET', 'PUT', 'DELETE'].includes(request.method))
       || (idPath[1].toLowerCase() === 'announcements' && request.service === 'announcements'
-        && request.method === 'PUT'));
+        && ['PUT', 'DELETE'].includes(request.method)));
 
   if (!collectionPath && !routeMatches) return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   if (request.deviceRegistered !== true) return deny(request, 'device_not_registered', ['device_registered']);
 
   // Preserve the existing notes read and step-up policy.
-  if (collectionPath || (idPath?.[1].toLowerCase() === 'notes' && request.method === 'GET')) {
+  if (collectionPath || (idPath?.[1].toLowerCase() === 'notes' && ['GET', 'DELETE'].includes(request.method))) {
     if (idPath && request.subjectId !== request.resourceOwnerSubjectId) {
       return deny(request, 'starter_not_ready', ['memo_owner_only']);
     }
@@ -117,14 +124,14 @@ export async function decide(request) {
     return allow(request, ['device_registered', ...(idPath ? ['memo_owner_only'] : [])]);
   }
 
-  if (idPath[1].toLowerCase() === 'notes' && request.method === 'PUT') {
+  if (idPath[1].toLowerCase() === 'notes' && ['PUT', 'DELETE'].includes(request.method)) {
     if (request.subjectId !== request.resourceOwnerSubjectId) {
       return deny(request, 'starter_not_ready', ['memo_owner_only']);
     }
     return allow(request, ['device_registered', 'memo_owner_only']);
   }
 
-  if (idPath[1].toLowerCase() === 'announcements' && request.method === 'PUT') {
+  if (idPath[1].toLowerCase() === 'announcements' && ['PUT', 'DELETE'].includes(request.method)) {
     if (request.actorRole !== 'instructor' || request.subjectId !== request.resourceOwnerSubjectId) {
       return deny(request, 'starter_not_ready', ['announcement_instructor_owner_only']);
     }

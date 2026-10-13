@@ -44,3 +44,10 @@ test('쿼리 기능 선택, 알 수 없는 경로, 기능명 경로는 거부된
   assert.equal((await decide(request({ path: '/notes/11111111-1111-4111-8111-111111111111/export', route: 'GET /notes/:id' }))).decision, 'deny');
   assert.equal((await decide(request({ path: '/unknown', route: 'GET /notes/:id' }))).decision, 'deny');
 });
+
+test('the real API /api prefix is accepted without opening extra path segments', async () => {
+  const ownApiPath = request({ path: '/api/notes/11111111-1111-4111-8111-111111111111' });
+  assert.equal((await decide(ownApiPath)).decision, 'allow');
+  const exportPath = request({ path: '/api/notes/11111111-1111-4111-8111-111111111111/export' });
+  assert.equal((await decide(exportPath)).decision, 'deny');
+});

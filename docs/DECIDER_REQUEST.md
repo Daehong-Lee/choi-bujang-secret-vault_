@@ -46,8 +46,8 @@
 
 ## 8단계 자원 구역 규칙
 
-- `GET /notes/:id`, `PUT /notes/:id`: `path`는 UUID 하나로 끝나는 정확한 자원 경로여야 하며 `subjectId === resourceOwnerSubjectId`일 때만 허용합니다.
-- `PUT /announcements/:id`: 강사 역할이며 자원 소유자일 때만 허용합니다. 일반 학생은 거부합니다.
+- `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`: `path`는 UUID 하나로 끝나는 정확한 자원 경로여야 하며 `subjectId === resourceOwnerSubjectId`일 때만 허용합니다.
+- `PUT /announcements/:id`, `DELETE /announcements/:id`: 강사 역할이며 자원 소유자일 때만 허용합니다. 일반 학생은 거부합니다.
 - 쿼리 문자열은 비어 있어야 합니다. 기능 선택을 쿼리로 하지 않으며, `/notes/export`, `/notes/:id/export` 같은 미등록 경로는 거부합니다.
 - 기존 등록 기기 및 위험 신호 기반 추가 인증 규칙은 유지됩니다.
 

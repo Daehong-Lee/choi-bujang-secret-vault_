@@ -36,3 +36,17 @@ test('resource APIs use verifier identity and stored resource ownership, not bod
   assert.match(source[0], /\.eq\('owner_id', identity\.userId\)/u);
   assert.match(source[2], /authorizeAnnouncementCreate\(identity\)/u);
 });
+
+
+test('item APIs restore owner self-read through a signed engine decision and require context for changes', async () => {
+  const note = await readFile(new URL('../api/notes/[id].js', import.meta.url), 'utf8');
+  const announcement = await readFile(new URL('../api/announcements/[id].js', import.meta.url), 'utf8');
+  for (const code of [note, announcement]) {
+    assert.match(code, /authorizeWithEngine/u);
+    assert.match(code, /engineContextRequired/u);
+  }
+  assert.match(note, /Regression fix S08_OWN_BROKEN/u);
+  assert.match(note, /authorizeMemoOwner\(identity, existing\)/u);
+  assert.match(announcement, /authorizeAnnouncementWrite\(identity, existing\)/u);
+  assert.match(announcement, /identity, service: 'announcements'/u);
+});
