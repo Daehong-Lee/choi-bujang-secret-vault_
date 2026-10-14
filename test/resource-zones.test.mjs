@@ -23,6 +23,14 @@ test('학생 예제 계정의 개별 메모 읽기는 소유자 비교 없이 �
   assert.equal((await decide(otherOwner)).decision, 'allow');
 });
 
+test('배포 계약의 /api 경로 별칭도 본인 메모 상세 경로로 허용한다', async () => {
+  const result = await decide(request({
+    path: '/api/notes/virtual-memo-1',
+    route: 'GET /api/notes/:id',
+  }));
+  assert.equal(result.decision, 'allow');
+});
+
 test('개별 메모 수정·삭제 경로는 허용하지만 ID 없는 메모 목록은 거부한다', async () => {
   assert.equal((await decide(request({ method: 'PUT', route: 'PUT /notes/:id' }))).decision, 'allow');
   assert.equal((await decide(request({ method: 'DELETE', route: 'DELETE /notes/:id' }))).decision, 'allow');

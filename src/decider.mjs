@@ -89,6 +89,10 @@ export async function decide(request) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }
   const canonicalPath = request.path.startsWith('/api/') ? request.path.slice(4) : request.path;
+  // The deployment contract lists public routes with /api, while the decision
+  // request contract historically uses service-relative routes. Normalize only
+  // this exact prefix so a valid self-resource GET is not denied by alias mismatch.
+  const canonicalRoute = request.route.replace(/^(GET|POST|PUT|PATCH|DELETE) \/api\//u, '$1 /');
   if (request.at && (!Number.isFinite(Date.parse(request.at))
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
 
@@ -97,16 +101,16 @@ export async function decide(request) {
   const announcementCollection = canonicalPath === '/announcements'
     && request.method === 'GET'
     && request.service === 'announcements'
-    && request.route === 'GET /announcements';
+    && canonicalRoute === 'GET /announcements';
   const memoRouteMatches = Boolean(memoPath)
     && canonicalPath !== '/notes/export'
     && request.service === 'notes'
-    && request.route === `${request.method} /notes/:id`
+    && canonicalRoute === `${request.method} /notes/:id`
     && ['GET', 'PUT', 'DELETE'].includes(request.method);
   const announcementReadMatches = request.service === 'announcements'
     && ((Boolean(announcementPath)
         && request.method === 'GET'
-        && request.route === 'GET /announcements/:id')
+        && canonicalRoute === 'GET /announcements/:id')
       || announcementCollection);
 
   // No ID-less memo collection route. Announcement writes are never approved here;
