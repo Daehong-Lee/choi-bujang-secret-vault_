@@ -33,20 +33,50 @@ test('resource APIs use verifier identity and stored resource ownership, not bod
   }
   assert.match(source[1], /authorizeMemoOwner\(identity, existing\)/u);
   assert.match(source[3], /authorizeAnnouncementWrite\(identity, existing\)/u);
-  assert.match(source[0], /\.eq\('owner_id', identity\.userId\)/u);
+  assert.match(source[0], /owner_id: identity\.userId/u);
   assert.match(source[2], /authorizeAnnouncementCreate\(identity\)/u);
 });
 
 
-test('item APIs restore owner self-read through a signed engine decision and require context for changes', async () => {
+test('memo item API requires signed engine context while announcement writes use the separate server management path', async () => {
   const note = await readFile(new URL('../api/notes/[id].js', import.meta.url), 'utf8');
   const announcement = await readFile(new URL('../api/announcements/[id].js', import.meta.url), 'utf8');
-  for (const code of [note, announcement]) {
-    assert.match(code, /authorizeWithEngine/u);
-    assert.match(code, /engineContextRequired/u);
-  }
+  assert.match(note, /authorizeWithEngine/u);
+  assert.match(note, /engineContextRequired/u);
   assert.match(note, /Regression fix S08_OWN_BROKEN/u);
   assert.match(note, /authorizeMemoOwner\(identity, existing\)/u);
   assert.match(announcement, /authorizeAnnouncementWrite\(identity, existing\)/u);
-  assert.match(announcement, /identity, service: 'announcements'/u);
+  assert.match(announcement, /separate server-management path/u);
+  assert.doesNotMatch(announcement, /authorizeWithEngine|engineContextRequired/u);
+});
+
+
+test('API checks persisted resource ownership before asking the decider about the route', async () => {
+  const note = await readFile(new URL('../api/notes/[id].js', import.meta.url), 'utf8');
+  const announcement = await readFile(new URL('../api/announcements/[id].js', import.meta.url), 'utf8');
+  const engine = await readFile(new URL('../src/engine-authorization.mjs', import.meta.url), 'utf8');
+  assert.ok(note.indexOf('authorizeMemoOwner(identity, existing)') < note.indexOf('authorizeWithEngine('));
+  assert.match(announcement, /authorizeAnnouncementWrite\(identity, existing\)/u);
+  assert.doesNotMatch(announcement, /authorizeWithEngine|engineContextRequired/u);
+  assert.doesNotMatch(engine, /ownerUserId|resourceOwnerSubjectId|RESOURCE_OWNER_MISMATCH/u);
+  assert.match(note, /if \(!access\.allowed\)\s*\{[\s\S]*?return json\(res, access\.status === 401 \? 401 : 404/u);
+});
+
+
+test('ID-less memo collection GET is denied and Stage 8 config lists only decider-allowed routes', async () => {
+  const notes = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
+  const config = JSON.parse(await readFile(new URL('../aleph.config.json', import.meta.url), 'utf8'));
+  const contract = await readFile(new URL('../docs/DECIDER_REQUEST.md', import.meta.url), 'utf8');
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(notes, /COLLECTION_ROUTE_DENIED/u);
+  assert.equal(config.step, 8);
+  assert.deepEqual(config.allowedRoutes, [
+    'GET /api/notes/:id', 'PUT /api/notes/:id', 'DELETE /api/notes/:id',
+    'GET /api/announcements', 'GET /api/announcements/:id',
+  ]);
+  assert.match(contract, /UUID 형식으로 제한하지 않습니다/u);
+  assert.match(contract, /DB의 `owner_id`/u);
+  assert.match(contract, /공지의 `POST`, `PUT`, `PATCH`, `DELETE`는 역할과 무관하게 판정기에서 모두 거부/u);
+  assert.match(readme, /`step`은 8/u);
+  assert.match(readme, /판정기에서 거부합니다/u);
 });

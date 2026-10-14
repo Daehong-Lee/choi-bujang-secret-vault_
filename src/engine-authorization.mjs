@@ -21,7 +21,7 @@ function requestPath(req) {
  * envelope. Payload is base64url(JSON.stringify({ loginUserId, decisionRequest }));
  * signature is lowercase hex HMAC-SHA256(payload, ALEPH_ENGINE_CONTEXT_SECRET).
  */
-export async function authorizeWithEngine({ req, identity, service, id, ownerUserId }) {
+export async function authorizeWithEngine({ req, identity, service, id }) {
   const encoded = req?.headers?.['x-aleph-engine-context'];
   const suppliedSignature = req?.headers?.['x-aleph-engine-signature'];
   if (encoded == null && suppliedSignature == null) return { present: false };
@@ -64,12 +64,8 @@ export async function authorizeWithEngine({ req, identity, service, id, ownerUse
     return { present: true, ...deny('ENGINE_ROLE_MISMATCH') };
   }
 
-  // The verified database owner is also checked independently by each API route.
-  // This prevents a signed decision context from overriding the stored owner.
-  if (typeof ownerUserId === 'string' && ownerUserId !== identity.userId
-      && request.subjectId === request.resourceOwnerSubjectId) {
-    return { present: true, ...deny('RESOURCE_OWNER_MISMATCH', 404) };
-  }
+  // This helper verifies the signed engine context and the request path only.
+  // Resource ownership is deliberately enforced by the API against the persisted row.
 
   let decision;
   try { decision = await decide(request); }

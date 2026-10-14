@@ -13,7 +13,8 @@ test('메모와 공지는 같은 UUID 공간에서 resource_type으로 분리되
 
   assert.match(migration, /resource_type text not null default 'memo'/u);
   assert.match(migration, /check \(resource_type in \('memo', 'announcement'\)\)/u);
-  assert.match(notes, /\.eq\('resource_type', 'memo'\)/u);
+  assert.match(notes, /reason: 'COLLECTION_ROUTE_DENIED'/u);
+  assert.match(notes, /resource_type: 'memo'/u);
   assert.match(noteById, /\.eq\('resource_type', 'memo'\)/u);
   assert.match(announcements, /\.eq\('resource_type', 'announcement'\)/u);
   assert.match(announcements, /resource_type: 'announcement'/u);

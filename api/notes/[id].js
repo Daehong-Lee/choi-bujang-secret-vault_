@@ -51,18 +51,14 @@ export default async function handler(req, res) {
 
     const access = authorizeMemoOwner(identity, existing);
     if (!access.allowed) {
-      // A foreign resource is denied before its content is ever returned.
-      // If a signed engine envelope was supplied, it must also independently deny it.
-      if (existing?.resource_type === 'memo') {
-        const engine = await authorizeWithEngine({ req, identity, service: 'notes', id, ownerUserId: existing.owner_id });
-        if (engine.present && !engine.allowed) return json(res, engine.status, { error: '자료 접근이 거부되었습니다.', reason: engine.reason });
-      }
+      // Ownership and resource type are checked here from the persisted row.
+      // Do not ask the decider to make an ownership decision for a foreign resource.
       return json(res, access.status === 401 ? 401 : 404, { error: '자료를 찾을 수 없습니다.', reason: access.reason });
     }
 
     if (req.method === 'GET') {
       const engine = engineContextRequired(await authorizeWithEngine({
-        req, identity, service: 'notes', id, ownerUserId: existing.owner_id,
+        req, identity, service: 'notes', id,
       }));
       if (!engine.allowed) return json(res, engine.status, { error: '자료 접근이 거부되었습니다.', reason: engine.reason });
       // Regression fix S08_OWN_BROKEN: a valid, signed engine decision for the
@@ -71,7 +67,7 @@ export default async function handler(req, res) {
     }
 
     const engine = engineContextRequired(await authorizeWithEngine({
-      req, identity, service: 'notes', id, ownerUserId: existing.owner_id,
+      req, identity, service: 'notes', id,
     }));
     if (!engine.allowed) return json(res, engine.status, { error: '자료 변경이 거부되었습니다.', reason: engine.reason });
 

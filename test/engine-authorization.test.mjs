@@ -29,7 +29,7 @@ function input(overrides = {}, requestOverrides = {}, loginUserId = id) {
       'x-aleph-engine-context': envelope.encoded,
       'x-aleph-engine-signature': envelope.signature,
     } },
-    identity: { kind: 'student', userId: id }, service: 'notes', id, ownerUserId: id,
+    identity: { kind: 'student', userId: id }, service: 'notes', id,
     ...overrides,
   };
 }
@@ -40,9 +40,9 @@ test('signed engine context allows the authenticated owner to read their own mem
   assert.equal(result.allowed, true);
 });
 
-test('engine context denies a cross-zone memo request and mismatched method/path', async () => {
-  const foreign = await authorizeWithEngine(input({}, { subjectId: 'subject-B' }));
-  assert.equal(foreign.allowed, false);
+test('decider path authorization leaves memo ownership to the API and denies mismatched method/path', async () => {
+  const ownerComparisonIsDeferred = await authorizeWithEngine(input({}, { subjectId: 'subject-B' }));
+  assert.equal(ownerComparisonIsDeferred.allowed, true);
   const wrongMethod = await authorizeWithEngine(input({}, { method: 'PUT', route: 'PUT /notes/:id' }));
   assert.equal(wrongMethod.allowed, false);
   const wrongPath = await authorizeWithEngine(input({}, { path: '/notes/export' }));

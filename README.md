@@ -28,14 +28,16 @@
 
 2단계에서는 가상 메모를 Supabase의 `public.learning_notes` 테이블에 보관하고, Vercel의 `api/notes.js` 서버 함수가 `SUPABASE_URL`과 서버 전용 `SUPABASE_SECRET_KEY` 환경변수로 자료를 조회합니다. 이 두 키는 브라우저 코드, HTTP 응답, 로그에 포함하지 않습니다. `learning_notes`의 RLS는 켜져 있으며 `anon`과 `authenticated`에는 직접 `SELECT` 권한을 주지 않습니다.
 
-현재 `/api/notes` 함수 자체는 공개 Vercel 주소이므로 인증 없이 호출할 수 있다는 약점이 남아 있습니다. 다음 방어 단계에서 이 공개 API 접근을 보호해야 합니다.
+2단계 당시에는 `/api/notes` 함수의 인증 보호가 미완성이었습니다. 이후 단계의 인증·인가 규칙은 아래 단계 기록을 기준으로 확인하며, 과거 설명을 현재 배포 상태로 해석하지 않습니다.
 
-### 8단계: 메모와 강사 공지 자원 구분
+### 8단계: 자료별 자원 구역과 경로 허용 규칙
 
-- `learning_notes.resource_type`으로 `memo`와 `announcement`를 구분합니다. 기존 행은 `memo`로 유지하며 기존 UUID와 `/api/notes` 및 `/api/notes/[id]` 주소는 바꾸지 않습니다.
-- 메모 API는 `resource_type=memo`인 자료만 조회·수정·삭제합니다. 강사 공지는 `/api/announcements` 및 `/api/announcements/[id]`에서 다루며, 모든 응답에 UUID `id`와 `resourceType`을 포함합니다.
-- 공지 조회는 로그인한 사용자에게 허용하고, 공지 등록·수정·삭제는 검증된 `judge` 신원만 허용합니다. 새 API는 기존 화면 메뉴에 연결하지 않았습니다.
-- 적용 전에 SQL Editor에서 `supabase/migrate_virtual_notes.sql`을 실행합니다. 이 변경은 실제 DB에 자동 적용하지 않습니다.
+- `learning_notes.resource_type`으로 `memo`와 `announcement`를 구분합니다. 기존 행과 UUID를 유지하며 메모와 공지는 각각 `/api/notes/:id`, `/api/announcements/:id` 경로에서 구분합니다.
+- 판정기는 메모의 `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`와 공지의 `GET /announcements`, `GET /announcements/:id`만 허용합니다. ID 없는 메모 목록·생성 경로, 공지 쓰기, 강사 자료 구역, 미등록 경로는 판정기에서 거부합니다. 가상 심판 ID는 UUID 형식으로 제한하지 않습니다.
+- 판정기는 메모 소유권이나 강사 역할을 대신 판단하지 않습니다. 메모 상세 API는 검증된 로그인 사용자와 DB의 `owner_id`를 비교합니다. 공지 쓰기는 판정기 허용 경로가 아니며, 별도 서버 관리 경로에서만 검증된 강사 신원과 DB 소유권을 확인해야 합니다.
+- `aleph.config.json`의 `step`은 8이며 `allowedRoutes`에는 판정기가 허용하는 메서드·경로만 기재합니다. 설정 계약은 `docs/DECIDER_REQUEST.md`를 따릅니다.
+- DB 변경이 필요하면 적용 전에 SQL Editor에서 `supabase/migrate_virtual_notes.sql`을 검토·실행합니다. 저장소 수정만으로 실제 DB에 자동 적용되지는 않습니다.
+- 주의: 현재 화면의 메모 목록·생성 기능은 `/api/notes` 컬렉션 경로를 호출하므로, 판정기 정책과 화면 연동을 함께 확인해야 합니다. 로컬 테스트만으로 운영 배포나 실제 심판 결과가 입증되지는 않습니다.
 
 
 ### Vercel 환경변수 설정
@@ -83,7 +85,7 @@ done
 
 2단계에서 `/data.json`은 정적 자료 경로로 공개되지 않아야 합니다. 따라서 `/data.json`의 응답이 `404`이고 네 문장이 나오지 않는지를 확인합니다. `/`의 HTML에서도 네 문장이 정적으로 들어 있지 않은지 확인합니다.
 
-현재 단계의 `/api/notes`는 아직 공개 주소라는 약점이 있으므로, API 자체를 확인할 때는 다음처럼 별도로 검색합니다.
+아래 명령은 2단계 당시 공개 API 상태를 확인하기 위한 역사적 점검 예시입니다. 8단계 정책에서는 ID 없는 메모 목록 GET이 거부되어야 합니다.
 
 ```bash
 curl -sS "$DEPLOY_URL/api/notes" > /tmp/vault-api-response
@@ -95,7 +97,7 @@ grep -n -F -e "실습용 가상 과제 기록" \
   /tmp/vault-api-response || true
 ```
 
-여기서 네 문장이 `/api/notes` 응답에 나타나는 것은 현재 2단계 구현상 예상되는 결과입니다. **보호 확인의 핵심은 네 문장이 정적 `/data.json`이나 정적 화면 파일에 들어 있지 않고, 서버 함수 경로에서만 조회되는지 확인하는 것입니다.** `/api/notes`가 공개되어 있다는 사실은 README에 적은 다음 단계의 약점으로 남겨 둡니다.
+이 설명은 2단계 당시 동작을 기록한 것입니다. 현재 8단계에서는 `/api/notes`의 ID 없는 GET 요청이 `COLLECTION_ROUTE_DENIED`로 거부되어야 합니다. 운영 배포가 이 정책을 따르는지는 새 배포 후 별도로 확인해야 합니다.
 
 ### B. GitHub 최신 파일 확인
 
@@ -128,7 +130,7 @@ done
 
 - **현재 배포:** `/data.json`이 공개되지 않는지 확인한다.
 - **현재 GitHub 최신 파일:** `public/data.json`이 없고, 정적 공개 파일에 네 문장이 포함되지 않는지 확인한다.
-- **현재 API:** `/api/notes`에 네 문장이 나오는 것은 현재 단계에서 예상되지만, API가 공개되어 있다는 약점도 함께 기록한다.
+- **2단계 당시 API:** `/api/notes`가 목록을 반환하던 동작은 역사적 기록이며, 8단계의 현재 정책은 ID 없는 GET을 거부한다.
 - **과거 공개 커밋:** 과거 커밋에 네 문장이 있었는지는 `git log`와 해당 커밋의 파일을 별도로 확인한다.
 - **과거 배포:** 이전 Vercel 배포에 `/data.json` 또는 공개 자료가 남아 있었는지 별도로 확인한다.
 
@@ -147,7 +149,7 @@ export const SUPABASE_PUBLISHABLE_KEY = '[ ]';
 
 `SUPABASE_SECRET_KEY`는 이 파일이나 다른 브라우저 파일에 넣지 않습니다. 로그인 실패 시 Supabase가 반환한 오류 이유를 화면에 표시합니다.
 
-현재 단계에서 이 로그인 화면을 추가했다고 해서 `/api/notes`가 자동으로 인증 보호되는 것은 아닙니다. `/api/notes`는 여전히 공개 Vercel 함수라는 기존 약점이 있으므로, API 자체의 인증·인가 보호는 별도 단계에서 구현해야 합니다.
+로그인 화면만으로 API 권한이 보장되지는 않습니다. 현재 API는 각 요청에서 토큰을 검증하고, 자원별 API에서는 저장된 소유권을 다시 확인해야 합니다. 8단계 정책상 ID 없는 메모 목록 GET은 거부됩니다.
 
 ## `device_registered` 규칙 확인 순서
 

@@ -38,23 +38,17 @@ export default async function handler(req, res) {
   if (!identity?.userId) {
     return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   }
+  // Stage 8 forbids the ID-less memo collection read route. Memo reads must
+  // select one resource ID so the persisted owner check can run in the item API.
+  if (req.method === 'GET') {
+    return json(res, 403, { error: '메모 목록 경로는 허용되지 않습니다. 메모 ID를 지정해 주세요.', reason: 'COLLECTION_ROUTE_DENIED' });
+  }
 
   try {
     const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    if (req.method === 'GET') {
-      const { data, error } = await supabase
-        .from('learning_notes')
-        .select('id, resource_type, title, body')
-        .eq('resource_type', 'memo')
-        .eq('owner_id', identity.userId)
-        .order('id', { ascending: true });
-
-      if (error) return json(res, 500, { error: '자료를 불러오지 못했습니다.' });
-      return json(res, 200, (data ?? []).map(noteView));
-    }
 
     const input = parseBody(req);
     const id = input.id == null || input.id === '' ? crypto.randomUUID() : input.id;

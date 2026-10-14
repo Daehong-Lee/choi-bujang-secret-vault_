@@ -4,16 +4,16 @@
 
 ## 요청
 
-요청은 아래 **20개 이름만** 포함합니다. `actorRole`과 `resourceOwnerSubjectId`는 자원 구역 판정에 필요한 엔진 확인값입니다. 운영 엔진이 이 두 값을 신뢰 가능한 출처에서 확인해 계약에 제공하지 않는 경우, 임의로 브라우저 입력에서 만들지 말고 판정기 연동을 완료하기 전까지 해당 요청을 거부해야 합니다.
+요청은 아래 **20개 이름만** 포함합니다. `actorRole`과 `resourceOwnerSubjectId`는 고정 요청 스키마의 엔진 확인값입니다. 이 값들을 브라우저에서 만들면 안 됩니다. 다만 8단계 경로 판정기는 역할이나 소유자 비교로 접근 권한을 부여하지 않습니다. 저장된 자료의 소유권은 API가 검증된 로그인 신원과 DB 행을 비교해 확인합니다.
 
 | 항목 | 뜻 |
 |---|---|
 | `schema` | 항상 `aleph.decision.v1` |
-| `requestId` | 이번 요청의 UUID. 응답에 그대로 돌려줍니다. |
+| `requestId` | 이번 요청의 UUID. 응답에 그대로 돌려줍니다. (실제 자료 경로의 ID와는 별개입니다.) |
 | `classId`, `projectId` | 운영 엔진이 확인한 반과 학생 프로젝트 |
 | `subjectId` | 발급자·대상·반·프로젝트를 묶어 만든 가명 주체 ID. Supabase 사용자 번호와 직접 비교하지 않습니다. |
-| `actorRole` | 엔진이 확인한 `student` 또는 `instructor`. 클라이언트가 정한 역할은 사용하지 않습니다. |
-| `resourceOwnerSubjectId` | 해당 자원의 소유자를 `subjectId`와 같은 가명 ID 공간으로 엔진이 확인한 값. 메모·공지 소유권 비교에 사용합니다. |
+| `actorRole` | 엔진이 확인한 `student` 또는 `instructor`. 고정 계약 필드이며 클라이언트가 정한 역할은 사용하지 않습니다. 8단계 경로 허용 여부를 결정하는 데 사용하지 않습니다. |
+| `resourceOwnerSubjectId` | 엔진이 확인한 자원 소유자의 가명 ID. 고정 계약 필드지만 8단계 판정기는 `subjectId`와 비교하지 않습니다. 실제 소유권 검사는 API가 DB의 `owner_id`와 검증된 로그인 사용자 ID를 비교합니다. |
 | `deviceId` | 확인된 기기의 16자리 소문자 16진수 ID. 개인키가 아닙니다. |
 | `service`, `method`, `path`, `route` | 확인된 서비스와 요청 경로. `route`는 `GET /notes/:id`처럼 허용된 경로 모양입니다. |
 | `queryLength`, `querySha256` | 쿼리 문자열의 길이와 SHA-256 지문. 원문 쿼리는 전달되지 않습니다. |
@@ -24,7 +24,7 @@
 | `recentEvents` | 엔진이 제공한 최근 사건 배열. 최대 12건이며 각 항목은 `{kind, ageSeconds, count}`입니다. |
 | `signals` | `{source, region, network, hour}`. 현재 실제 경로에서는 `source: "none"`, `region/network: "unknown"`입니다. `judge_fixture` 신호를 실제 위치 증거로 취급하지 않습니다. |
 
-이 판정기는 엔진 확인값인 `actorRole`과 `resourceOwnerSubjectId` 없이는 fail-closed로 거부합니다. 현재 운영 엔진의 계약이 이 두 필드를 제공하지 않는다면, 실제 심판/배포 환경에서 이 규칙을 사용할 수 있다고 간주하지 마세요. 엔진 계약을 정식으로 확장하고 검증한 뒤 연동해야 합니다. 브라우저 요청이나 임의 상수로 값을 채우면 안 됩니다.
+이 판정기는 고정 스키마에 `actorRole`과 `resourceOwnerSubjectId`가 포함되어 있는지와 형식을 확인하지만, 이 값으로 역할·소유권 권한을 부여하지 않습니다. 운영 엔진은 계약 필드를 신뢰 가능한 출처에서 채워야 하며, 브라우저 요청이나 임의 상수로 값을 채우면 안 됩니다.
 
 ## 응답
 
@@ -46,11 +46,11 @@
 
 ## 8단계 자원 구역 규칙
 
-- `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`: `path`는 UUID 하나로 끝나는 정확한 자원 경로여야 하며 `subjectId === resourceOwnerSubjectId`일 때만 허용합니다.
-- `PUT /announcements/:id`, `DELETE /announcements/:id`: 강사 역할이며 자원 소유자일 때만 허용합니다. 일반 학생은 거부합니다.
-- 쿼리 문자열은 비어 있어야 합니다. 기능 선택을 쿼리로 하지 않으며, `/notes/export`, `/notes/:id/export` 같은 미등록 경로는 거부합니다.
-- 기존 등록 기기 및 위험 신호 기반 추가 인증 규칙은 유지됩니다.
-
+- 메모 상세 경로는 `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`만 허용합니다. `:id`는 `/`가 아닌 단일 경로 조각이며, UUID 형식으로 제한하지 않습니다. 실제 DB API는 별도로 DB ID 형식을 검증할 수 있습니다.
+- `GET /notes` 및 `POST /notes` 같은 ID 없는 메모 경로는 판정기에서 허용하지 않습니다. 메모의 실제 소유권은 API가 저장된 `resource_type=memo`, `owner_id`와 검증된 로그인 신원을 비교해 확인합니다. 다른 소유자의 자료는 API에서 거부합니다.
+- 공지는 `GET /announcements`와 `GET /announcements/:id`만 판정기에서 허용합니다. 공지의 `POST`, `PUT`, `PATCH`, `DELETE`는 역할과 무관하게 판정기에서 모두 거부합니다. 강사 관리가 필요하면 별도 서버 관리 경로에서 검증된 강사 신원과 저장된 자료 소유권을 확인해야 하며, 판정기의 허용 경로로 추가하면 안 됩니다.
+- 강사 자료 구역 및 알 수 없는 경로, 추가 하위 경로, 쿼리 문자열로 기능을 선택하는 요청은 거부합니다. `/notes/export`, `/notes/:id/export` 등도 허용하지 않습니다.
+- 기존 등록 기기 및 위험 신호 기반 추가 인증 규칙은 유지됩니다. 판정기 통과는 실제 API 소유권 검증이나 실제 심판 결과를 대신하지 않습니다.
 ## 구현 전 확인
 
 1. 규칙이 참일 때만 허용하고 나머지는 거부하거나 추가 확인을 요구합니다.

@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { createClient } from '@supabase/supabase-js';
 import { authorizeAnnouncementWrite } from '../../src/resource-access.mjs';
-import { authorizeWithEngine, engineContextRequired } from '../../src/engine-authorization.mjs';
 
 const root = process.cwd();
 const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
@@ -53,19 +52,12 @@ export default async function handler(req, res) {
       return json(res, 200, noteView(existing));
     }
 
-    const engineAttempt = await authorizeWithEngine({
-      req, identity, service: 'announcements', id, ownerUserId: existing.owner_id,
-    });
-    // If a signed engine context exists, its verified role/device/method/path
-    // decision runs before API role checks; a denial cannot be bypassed below.
-    if (engineAttempt.present && !engineAttempt.allowed) {
-      return json(res, engineAttempt.status, { error: '강사 공지 변경이 거부되었습니다.', reason: engineAttempt.reason });
-    }
+    // Announcement writes are intentionally not allowed by the decider.
+    // This separate server-management path requires a verified judge identity
+    // and checks the persisted resource type/owner before any mutation.
     if (identity.kind !== 'judge') return json(res, 403, { error: '강사 공지는 강사 권한으로만 수정할 수 있습니다.', reason: 'INSTRUCTOR_REQUIRED' });
     const access = authorizeAnnouncementWrite(identity, existing);
     if (!access.allowed) return json(res, access.status, { error: '강사 공지를 수정할 수 없습니다.', reason: access.reason });
-    const engine = engineContextRequired(engineAttempt);
-    if (!engine.allowed) return json(res, engine.status, { error: '강사 공지 변경이 거부되었습니다.', reason: engine.reason });
 
     if (req.method === 'PUT') {
       const input = parseBody(req);

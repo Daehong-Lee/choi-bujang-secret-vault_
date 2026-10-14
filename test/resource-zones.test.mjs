@@ -9,7 +9,7 @@ function request(overrides = {}) {
     schema: 'aleph.decision.v1', requestId: randomUUID(), classId: 'class_fixture',
     projectId: 'project_fixture', subjectId: 'subject-A', resourceOwnerSubjectId: 'subject-A',
     actorRole: 'student', deviceId: 'a'.repeat(16), service: 'notes', method: 'GET',
-    path: '/notes/11111111-1111-4111-8111-111111111111', route: 'GET /notes/:id',
+    path: '/notes/virtual-memo-1', route: 'GET /notes/:id',
     queryLength: 0, querySha256: hash, at: new Date().toISOString(), policyRevision: 1,
     deviceRegistered: true, stepUp: { verified: false, authAgeSeconds: null },
     recentEvents: [], signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
@@ -17,37 +17,45 @@ function request(overrides = {}) {
   };
 }
 
-test('A는 자기 메모를 읽고 수정할 수 있다', async () => {
+test('학생 예제 계정의 개별 메모 읽기는 소유자 비교 없이 경로 규칙에서 허용된다', async () => {
   assert.equal((await decide(request())).decision, 'allow');
-  const edit = request({ method: 'PUT', route: 'PUT /notes/:id' });
-  assert.equal((await decide(edit)).decision, 'allow');
+  const otherOwner = request({ resourceOwnerSubjectId: 'subject-B' });
+  assert.equal((await decide(otherOwner)).decision, 'allow');
 });
 
-test('B는 A 소유 메모를 읽거나 수정할 수 없다', async () => {
-  const other = request({ subjectId: 'subject-B' });
-  assert.equal((await decide(other)).decision, 'deny');
-  const edit = request({ subjectId: 'subject-B', method: 'PUT', route: 'PUT /notes/:id' });
-  assert.equal((await decide(edit)).decision, 'deny');
+test('개별 메모 수정·삭제 경로는 허용하지만 ID 없는 메모 목록은 거부한다', async () => {
+  assert.equal((await decide(request({ method: 'PUT', route: 'PUT /notes/:id' }))).decision, 'allow');
+  assert.equal((await decide(request({ method: 'DELETE', route: 'DELETE /notes/:id' }))).decision, 'allow');
+  assert.equal((await decide(request({ path: '/notes', route: 'GET /notes' }))).decision, 'deny');
+  assert.equal((await decide(request({ method: 'POST', path: '/notes', route: 'POST /notes' }))).decision, 'deny');
 });
 
-test('강사는 본인 소유 공지를 수정할 수 있고 일반 학생은 거부된다', async () => {
-  const announcement = request({ service: 'announcements', method: 'PUT',
-    path: '/announcements/22222222-2222-4222-8222-222222222222',
-    route: 'PUT /announcements/:id', actorRole: 'instructor' });
-  assert.equal((await decide(announcement)).decision, 'allow');
-  assert.equal((await decide({ ...announcement, requestId: randomUUID(), actorRole: 'student' })).decision, 'deny');
+test('공지 조회만 허용하고 학생·강사 모두 공지 쓰기는 거부한다', async () => {
+  const announcement = {
+    service: 'announcements', path: '/announcements/class-note', route: 'GET /announcements/:id',
+    actorRole: 'student',
+  };
+  assert.equal((await decide(request(announcement))).decision, 'allow');
+  assert.equal((await decide(request({ service: 'announcements', path: '/announcements', route: 'GET /announcements' }))).decision, 'allow');
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    const path = method === 'POST' ? '/announcements' : '/announcements/class-note';
+    const route = method === 'POST' ? 'POST /announcements' : `${method} /announcements/:id`;
+    for (const actorRole of ['student', 'instructor']) {
+      const result = await decide(request({ service: 'announcements', method, path, route, actorRole }));
+      assert.equal(result.decision, 'deny', `${actorRole} ${method} must be denied`);
+    }
+  }
 });
 
-test('쿼리 기능 선택, 알 수 없는 경로, 기능명 경로는 거부된다', async () => {
+test('UUID가 아닌 가상 ID는 허용하지만 export·추가 경로·쿼리 선택은 거부한다', async () => {
+  assert.equal((await decide(request({ path: '/notes/judge-id-not-a-uuid' }))).decision, 'allow');
   assert.equal((await decide(request({ queryLength: 8 }))).decision, 'deny');
-  assert.equal((await decide(request({ path: '/notes/export', route: 'GET /notes/:id' }))).decision, 'deny');
-  assert.equal((await decide(request({ path: '/notes/11111111-1111-4111-8111-111111111111/export', route: 'GET /notes/:id' }))).decision, 'deny');
+  assert.equal((await decide(request({ path: '/notes/export' }))).decision, 'deny');
+  assert.equal((await decide(request({ path: '/notes/virtual-memo-1/export' }))).decision, 'deny');
   assert.equal((await decide(request({ path: '/unknown', route: 'GET /notes/:id' }))).decision, 'deny');
+  assert.equal((await decide(request({ service: 'instructor-materials', path: '/instructor-materials/handout-1', route: 'GET /instructor-materials/:id' }))).decision, 'deny');
 });
 
-test('the real API /api prefix is accepted without opening extra path segments', async () => {
-  const ownApiPath = request({ path: '/api/notes/11111111-1111-4111-8111-111111111111' });
-  assert.equal((await decide(ownApiPath)).decision, 'allow');
-  const exportPath = request({ path: '/api/notes/11111111-1111-4111-8111-111111111111/export' });
-  assert.equal((await decide(exportPath)).decision, 'deny');
+test('등록되지 않은 기기는 개별 메모 경로도 거부된다', async () => {
+  assert.equal((await decide(request({ deviceRegistered: false }))).decision, 'deny');
 });

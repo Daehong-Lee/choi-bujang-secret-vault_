@@ -3,8 +3,6 @@
 export const RULE_IDS = Object.freeze([
   'device_registered',
   'step_up_required',
-  'memo_owner_only',
-  'announcement_instructor_owner_only',
   'exact_resource_route',
   'starter.deny',
 ]);
@@ -84,59 +82,53 @@ function allow(request, ruleIds) {
 export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
-  // Exact route matching only. Accept the app's /api prefix as an exact alias;
-  // no other prefix, suffix, query-selected resource, or extra path segment is allowed.
+  // Exact route matching only. Accept the app's /api prefix as an exact alias.
+  // Resource IDs are opaque single path segments; they are not required to be UUIDs.
   const canonicalPath = request.path.startsWith('/api/') ? request.path.slice(4) : request.path;
   if (request.at && (!Number.isFinite(Date.parse(request.at))
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
-  const idPath = /^\/(notes|announcements)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu.exec(canonicalPath);
-  const collectionPath = canonicalPath === '/notes' && request.method === 'GET'
-    && request.service === 'notes' && request.route === 'GET /notes';
-  const expectedRoute = idPath
-    ? `${request.method} /${idPath[1].toLowerCase()}/:id`
-    : null;
-  const routeMatches = idPath
-    && request.route === expectedRoute
-    && ((idPath[1].toLowerCase() === 'notes' && request.service === 'notes'
-        && ['GET', 'PUT', 'DELETE'].includes(request.method))
-      || (idPath[1].toLowerCase() === 'announcements' && request.service === 'announcements'
-        && ['PUT', 'DELETE'].includes(request.method)));
 
-  if (!collectionPath && !routeMatches) return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
+  const memoPath = /^\/notes\/([^/]+)$/u.exec(canonicalPath);
+  const announcementPath = /^\/announcements\/([^/]+)$/u.exec(canonicalPath);
+  const announcementCollection = canonicalPath === '/announcements'
+    && request.method === 'GET'
+    && request.service === 'announcements'
+    && request.route === 'GET /announcements';
+  const memoRouteMatches = Boolean(memoPath)
+    && canonicalPath !== '/notes/export'
+    && request.service === 'notes'
+    && request.route === `${request.method} /notes/:id`
+    && ['GET', 'PUT', 'DELETE'].includes(request.method);
+  const announcementReadMatches = request.service === 'announcements'
+    && ((Boolean(announcementPath)
+        && request.method === 'GET'
+        && request.route === 'GET /announcements/:id')
+      || announcementCollection);
+
+  // No ID-less memo collection route. Announcement writes are never approved here;
+  // instructor-material paths and all other unknown paths fail closed as well.
+  if (request.service === 'announcements'
+      && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
+  }
+  if (!memoRouteMatches && !announcementReadMatches) {
+    return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
+  }
   if (request.deviceRegistered !== true) return deny(request, 'device_not_registered', ['device_registered']);
 
-  // Preserve the existing notes read and step-up policy.
-  if (collectionPath || (idPath?.[1].toLowerCase() === 'notes' && ['GET', 'DELETE'].includes(request.method))) {
-    if (idPath && request.subjectId !== request.resourceOwnerSubjectId) {
-      return deny(request, 'starter_not_ready', ['memo_owner_only']);
+  // Ownership is intentionally checked by the API against the persisted resource.
+  // Preserve the existing step-up rule for memo reads and deletes.
+  if (memoRouteMatches && ['GET', 'DELETE'].includes(request.method) && needsStepUp(request)) {
+    const stepUp = request.stepUp;
+    const recentlyVerified = stepUp?.verified === true
+      && Number.isInteger(stepUp.authAgeSeconds)
+      && stepUp.authAgeSeconds >= 0 && stepUp.authAgeSeconds <= 900;
+    if (!recentlyVerified) {
+      return { schema: 'aleph.decision.v1', requestId: request.requestId,
+        decision: 'step_up', reasonCode: 'step_up_required', ruleIds: ['step_up_required'] };
     }
-    if (needsStepUp(request)) {
-      const stepUp = request.stepUp;
-      const recentlyVerified = stepUp?.verified === true
-        && Number.isInteger(stepUp.authAgeSeconds)
-        && stepUp.authAgeSeconds >= 0 && stepUp.authAgeSeconds <= 900;
-      if (!recentlyVerified) {
-        return { schema: 'aleph.decision.v1', requestId: request.requestId,
-          decision: 'step_up', reasonCode: 'step_up_required', ruleIds: ['step_up_required'] };
-      }
-      return allow(request, ['device_registered', 'step_up_required']);
-    }
-    return allow(request, ['device_registered', ...(idPath ? ['memo_owner_only'] : [])]);
+    return allow(request, ['device_registered', 'step_up_required']);
   }
 
-  if (idPath[1].toLowerCase() === 'notes' && ['PUT', 'DELETE'].includes(request.method)) {
-    if (request.subjectId !== request.resourceOwnerSubjectId) {
-      return deny(request, 'starter_not_ready', ['memo_owner_only']);
-    }
-    return allow(request, ['device_registered', 'memo_owner_only']);
-  }
-
-  if (idPath[1].toLowerCase() === 'announcements' && ['PUT', 'DELETE'].includes(request.method)) {
-    if (request.actorRole !== 'instructor' || request.subjectId !== request.resourceOwnerSubjectId) {
-      return deny(request, 'starter_not_ready', ['announcement_instructor_owner_only']);
-    }
-    return allow(request, ['device_registered', 'announcement_instructor_owner_only']);
-  }
-
-  return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
+  return allow(request, ['device_registered', 'exact_resource_route']);
 }
