@@ -64,3 +64,27 @@ test('tampered signature and identity mismatch fail closed; self-read can be exp
   assert.deepEqual(engineContextRequired(absent), { allowed: false, status: 403, reason: 'ENGINE_CONTEXT_REQUIRED' });
   assert.deepEqual(engineContextRequired(absent, { required: false }), { allowed: true });
 });
+
+test('signed engine context allows a non-UUID fixture resource ID', async () => {
+  const fixtureId = 'SAMPLE_NOTE_1';
+  const decisionRequest = {
+    schema: 'aleph.decision.v1', requestId: randomUUID(), classId: 'class_fixture',
+    projectId: 'project_fixture', subjectId: 'subject-A', resourceOwnerSubjectId: 'subject-A',
+    actorRole: 'student', deviceId: 'a'.repeat(16), service: 'notes', method: 'GET',
+    path: `/notes/${fixtureId}`, route: 'GET /notes/:id', queryLength: 0, querySha256: emptyHash,
+    at: new Date().toISOString(), policyRevision: 1, deviceRegistered: true,
+    stepUp: { verified: false, authAgeSeconds: null }, recentEvents: [],
+    signals: { source: 'judge_fixture', region: 'local', network: 'usual', hour: 14 },
+  };
+  const encoded = Buffer.from(JSON.stringify({ loginUserId: id, decisionRequest })).toString('base64url');
+  const signature = createHmac('sha256', secret).update(encoded).digest('hex');
+  process.env.ALEPH_ENGINE_CONTEXT_SECRET = secret;
+  const result = await authorizeWithEngine({
+    req: { method: 'GET', url: `/api/notes/${fixtureId}`, headers: {
+      'x-aleph-engine-context': encoded, 'x-aleph-engine-signature': signature,
+    } },
+    identity: { kind: 'student', userId: id }, service: 'notes', id: fixtureId,
+  });
+  assert.equal(result.present, true);
+  assert.equal(result.allowed, true);
+});
