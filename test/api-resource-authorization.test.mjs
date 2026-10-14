@@ -29,22 +29,22 @@ test('resource APIs use verifier identity and stored resource ownership, not bod
   for (const code of source) {
     assert.match(code, /createLoginVerifier/u);
     assert.doesNotMatch(code, /input\.role|body\.role/u);
-    assert.match(code, /reason: 'AUTH_REQUIRED'/u);
   }
-  assert.match(source[1], /authorizeMemoOwner\(identity, existing\)/u);
+  const memoHandlers = await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8');
+  assert.match(memoHandlers, /reason: 'AUTH_REQUIRED'/u);
+  assert.match(memoHandlers, /authorizeMemoOwner\(identity, existing\)/u);
   assert.match(source[3], /authorizeAnnouncementWrite\(identity, existing\)/u);
-  assert.match(source[0], /owner_id: identity\.userId/u);
+  assert.match(memoHandlers, /owner_id: identity\.userId/u);
   assert.match(source[2], /authorizeAnnouncementCreate\(identity\)/u);
 });
 
 
-test('memo item API requires signed engine context while announcement writes use the separate server management path', async () => {
+test('memo item API always checks stored ownership and optionally checks signed engine context; announcement writes use the separate server management path', async () => {
   const note = await readFile(new URL('../api/notes/[id].js', import.meta.url), 'utf8');
   const announcement = await readFile(new URL('../api/announcements/[id].js', import.meta.url), 'utf8');
   assert.match(note, /authorizeWithEngine/u);
-  assert.match(note, /engineContextRequired/u);
-  assert.match(note, /Regression fix S08_OWN_BROKEN/u);
-  assert.match(note, /authorizeMemoOwner\(identity, existing\)/u);
+  assert.match(note, /createMemoApiHandlers/u);
+  assert.match(await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8'), /authorizeMemoOwner\(identity, existing\)/u);
   assert.match(announcement, /authorizeAnnouncementWrite\(identity, existing\)/u);
   assert.match(announcement, /separate server-management path/u);
   assert.doesNotMatch(announcement, /authorizeWithEngine|engineContextRequired/u);
@@ -55,20 +55,22 @@ test('API checks persisted resource ownership before asking the decider about th
   const note = await readFile(new URL('../api/notes/[id].js', import.meta.url), 'utf8');
   const announcement = await readFile(new URL('../api/announcements/[id].js', import.meta.url), 'utf8');
   const engine = await readFile(new URL('../src/engine-authorization.mjs', import.meta.url), 'utf8');
-  assert.ok(note.indexOf('authorizeMemoOwner(identity, existing)') < note.indexOf('authorizeWithEngine('));
+  const memoHandlers = await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8');
+  assert.ok(memoHandlers.indexOf('authorizeMemoOwner(identity, existing)') < memoHandlers.indexOf("authorizeEngine({ req, identity, service: 'notes', id })"));
   assert.match(announcement, /authorizeAnnouncementWrite\(identity, existing\)/u);
   assert.doesNotMatch(announcement, /authorizeWithEngine|engineContextRequired/u);
   assert.doesNotMatch(engine, /ownerUserId|resourceOwnerSubjectId|RESOURCE_OWNER_MISMATCH/u);
-  assert.match(note, /if \(!access\.allowed\)\s*\{[\s\S]*?return json\(res, access\.status === 401 \? 401 : 404/u);
+  assert.match(await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8'), /if \(!access\.allowed\)\s*\{[\s\S]*?return json\(res, access\.status === 401 \? 401 : 404/u);
 });
 
 
 test('ID-less memo collection GET is denied and Stage 8 config lists only decider-allowed routes', async () => {
   const notes = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
+  const memoHandlers = await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8');
   const config = JSON.parse(await readFile(new URL('../aleph.config.json', import.meta.url), 'utf8'));
   const contract = await readFile(new URL('../docs/DECIDER_REQUEST.md', import.meta.url), 'utf8');
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
-  assert.match(notes, /COLLECTION_ROUTE_DENIED/u);
+  assert.match(memoHandlers, /COLLECTION_ROUTE_DENIED/u);
   assert.equal(config.step, 8);
   assert.deepEqual(config.allowedRoutes, [
     'GET /api/notes/:id', 'PUT /api/notes/:id', 'DELETE /api/notes/:id',

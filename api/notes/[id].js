@@ -1,98 +1,30 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createLoginVerifier } from '../../src/verify-login.mjs';
 import { createClient } from '@supabase/supabase-js';
-import { authorizeMemoOwner } from '../../src/resource-access.mjs';
-import { authorizeWithEngine, engineContextRequired } from '../../src/engine-authorization.mjs';
+import { createLoginVerifier } from '../../src/verify-login.mjs';
+import { createMemoApiHandlers } from '../../src/memo-api-handlers.mjs';
+import { authorizeWithEngine } from '../../src/engine-authorization.mjs';
 
 const root = process.cwd();
 const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 const verifyLoginAuthorization = createLoginVerifier({ config, supabaseSecretKey });
 
-function json(res, status, body) {
-  res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(body));
+async function getStore() {
+  const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+  return {
+    findById: (id) => supabase.from('learning_notes')
+      .select('id, resource_type, title, body, owner_id').eq('id', id).maybeSingle(),
+    update: (id, ownerId, fields) => supabase.from('learning_notes').update(fields)
+      .eq('id', id).eq('resource_type', 'memo').eq('owner_id', ownerId)
+      .select('id, resource_type, title, body, owner_id').maybeSingle(),
+    delete: (id, ownerId) => supabase.from('learning_notes').delete()
+      .eq('id', id).eq('resource_type', 'memo').eq('owner_id', ownerId)
+      .select('id').maybeSingle(),
+  };
 }
 
-function parseBody(req) {
-  if (req.body && typeof req.body === 'object') return req.body;
-  if (typeof req.body === 'string') return JSON.parse(req.body);
-  return {};
-}
-
-function validUuid(value) {
-  return typeof value === 'string'
-    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value);
-}
-
-function noteView(note) {
-  return { id: note.id, resourceType: note.resource_type ?? 'memo', title: note.title, body: note.body };
-}
-
-export default async function handler(req, res) {
-  if (!['GET', 'PUT', 'DELETE'].includes(req.method)) {
-    res.setHeader('Allow', 'GET, PUT, DELETE');
-    return json(res, 405, { error: 'Method Not Allowed', reason: 'METHOD_NOT_ALLOWED' });
-  }
-  const identity = await verifyLoginAuthorization(req.headers.authorization);
-  if (!identity?.userId) return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
-  const id = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
-  if (!validUuid(id)) return json(res, 400, { error: 'id는 UUID여야 합니다.', reason: 'INVALID_RESOURCE_ID' });
-
-  try {
-    const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
-    const { data: existing, error: lookupError } = await supabase
-      .from('learning_notes').select('id, resource_type, title, body, owner_id')
-      .eq('id', id).maybeSingle();
-    if (lookupError) return json(res, 500, { error: '자료를 확인하지 못했습니다.', reason: 'RESOURCE_LOOKUP_FAILED' });
-
-    const access = authorizeMemoOwner(identity, existing);
-    if (!access.allowed) {
-      // Ownership and resource type are checked here from the persisted row.
-      // Do not ask the decider to make an ownership decision for a foreign resource.
-      return json(res, access.status === 401 ? 401 : 404, { error: '자료를 찾을 수 없습니다.', reason: access.reason });
-    }
-
-    if (req.method === 'GET') {
-      const engine = engineContextRequired(await authorizeWithEngine({
-        req, identity, service: 'notes', id,
-      }));
-      if (!engine.allowed) return json(res, engine.status, { error: '자료 접근이 거부되었습니다.', reason: engine.reason });
-      // Regression fix S08_OWN_BROKEN: a valid, signed engine decision for the
-      // authenticated owner is allowed; missing/invalid device or path context fails closed.
-      return json(res, 200, noteView(existing));
-    }
-
-    const engine = engineContextRequired(await authorizeWithEngine({
-      req, identity, service: 'notes', id,
-    }));
-    if (!engine.allowed) return json(res, engine.status, { error: '자료 변경이 거부되었습니다.', reason: engine.reason });
-
-    if (req.method === 'PUT') {
-      const input = parseBody(req);
-      if (typeof input.title !== 'string' || !input.title.trim()) return json(res, 400, { error: 'title이 필요합니다.' });
-      if (typeof input.body !== 'string') return json(res, 400, { error: 'body가 필요합니다.' });
-      const { data, error } = await supabase.from('learning_notes').update({
-        title: input.title, body: input.body,
-      }).eq('id', id).eq('resource_type', 'memo').eq('owner_id', identity.userId)
-        .select('id, resource_type, title, body, owner_id').maybeSingle();
-      if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.', reason: 'RESOURCE_UPDATE_FAILED' });
-      const updatedAccess = authorizeMemoOwner(identity, data);
-      if (!updatedAccess.allowed) return json(res, 404, { error: '자료를 찾을 수 없습니다.', reason: updatedAccess.reason });
-      return json(res, 200, noteView(data));
-    }
-
-    const { data, error } = await supabase.from('learning_notes').delete()
-      .eq('id', id).eq('resource_type', 'memo').eq('owner_id', identity.userId)
-      .select('id').maybeSingle();
-    if (error) return json(res, 500, { error: '자료를 삭제하지 못했습니다.', reason: 'RESOURCE_DELETE_FAILED' });
-    if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
-    return res.status(204).end();
-  } catch (error) {
-    if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
-    return json(res, 500, { error: '자료를 처리하지 못했습니다.' });
-  }
-}
+const handlers = createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine: authorizeWithEngine });
+export default handlers.item;

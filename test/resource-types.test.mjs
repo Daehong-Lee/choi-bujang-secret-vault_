@@ -13,13 +13,14 @@ test('메모와 공지는 같은 UUID 공간에서 resource_type으로 분리되
 
   assert.match(migration, /resource_type text not null default 'memo'/u);
   assert.match(migration, /check \(resource_type in \('memo', 'announcement'\)\)/u);
-  assert.match(notes, /reason: 'COLLECTION_ROUTE_DENIED'/u);
-  assert.match(notes, /resource_type: 'memo'/u);
+  const memoHandlers = await read('src/memo-api-handlers.mjs');
+  assert.match(memoHandlers, /reason: 'COLLECTION_ROUTE_DENIED'/u);
+  assert.match(memoHandlers, /resource_type: 'memo'/u);
   assert.match(noteById, /\.eq\('resource_type', 'memo'\)/u);
   assert.match(announcements, /\.eq\('resource_type', 'announcement'\)/u);
   assert.match(announcements, /resource_type: 'announcement'/u);
   assert.match(announcementById, /\.eq\('resource_type', 'announcement'\)/u);
   assert.match(announcementById, /identity\.kind !== 'judge'/u);
-  assert.match(notes, /resourceType: note\.resource_type/u);
+  assert.match(await read('src/memo-api-handlers.mjs'), /resourceType: note\.resource_type/u);
   assert.match(announcements, /resourceType: note\.resource_type/u);
 });
