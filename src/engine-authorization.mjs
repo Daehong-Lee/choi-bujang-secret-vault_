@@ -54,8 +54,19 @@ export async function authorizeWithEngine({ req, identity, service, id }) {
   const expectedRoute = `${req.method} /${service}/:id`;
   if (!UUID.test(id ?? '') || actualPath !== `/api${canonicalPath}`
       || request?.path !== canonicalPath || request?.method !== req.method
-      || request?.service !== service || request?.route !== expectedRoute
+      || request?.service !== service
       || request?.queryLength !== 0 || request?.querySha256 !== EMPTY_SHA256) {
+    return { present: true, ...deny('ENGINE_REQUEST_MISMATCH') };
+  }
+
+  // The deployment allow-list uses /api-prefixed routes, while the engine
+  // decision contract historically uses service-relative routes. Accept only
+  // these two exact spellings for the same resource route.
+  const routeAliases = new Set([
+    expectedRoute,
+    `${req.method} /api${canonicalPath}`.replace(/\/[^/]+$/u, '/:id'),
+  ]);
+  if (!routeAliases.has(request.route)) {
     return { present: true, ...deny('ENGINE_REQUEST_MISMATCH') };
   }
 

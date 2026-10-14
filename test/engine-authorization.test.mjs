@@ -40,6 +40,12 @@ test('signed engine context allows the authenticated owner to read their own mem
   assert.equal(result.allowed, true);
 });
 
+test('signed engine context accepts the exact /api route alias used by deployment configuration', async () => {
+  const result = await authorizeWithEngine(input({}, { route: 'GET /api/notes/:id' }));
+  assert.equal(result.present, true);
+  assert.equal(result.allowed, true);
+});
+
 test('decider path authorization leaves memo ownership to the API and denies mismatched method/path', async () => {
   const ownerComparisonIsDeferred = await authorizeWithEngine(input({}, { subjectId: 'subject-B' }));
   assert.equal(ownerComparisonIsDeferred.allowed, true);
