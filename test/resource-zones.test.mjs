@@ -50,6 +50,8 @@ test('공지 조회만 허용하고 학생·강사 모두 공지 쓰기는 거�
 test('UUID가 아닌 가상 ID는 허용하지만 export·추가 경로·쿼리 선택은 거부한다', async () => {
   assert.equal((await decide(request({ path: '/notes/judge-id-not-a-uuid' }))).decision, 'allow');
   assert.equal((await decide(request({ queryLength: 8 }))).decision, 'deny');
+  assert.equal((await decide(request({ path: '/notes/virtual-memo-1?mode=export' }))).decision, 'deny');
+  assert.equal((await decide(request({ path: '/notes/virtual-memo-1#export' }))).decision, 'deny');
   assert.equal((await decide(request({ path: '/notes/export' }))).decision, 'deny');
   assert.equal((await decide(request({ path: '/notes/virtual-memo-1/export' }))).decision, 'deny');
   assert.equal((await decide(request({ path: '/unknown', route: 'GET /notes/:id' }))).decision, 'deny');

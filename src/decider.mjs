@@ -83,7 +83,11 @@ export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
   // Exact route matching only. Accept the app's /api prefix as an exact alias.
+  // A query/hash embedded in path must not select a different operation.
   // Resource IDs are opaque single path segments; they are not required to be UUIDs.
+  if (request.path.includes('?') || request.path.includes('#')) {
+    return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
+  }
   const canonicalPath = request.path.startsWith('/api/') ? request.path.slice(4) : request.path;
   if (request.at && (!Number.isFinite(Date.parse(request.at))
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
