@@ -99,9 +99,13 @@ export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, auth
       // always checked here before any content is returned or changed.
       if (authorizeEngine) {
         const engine = await authorizeEngine({ req, identity, service: 'notes', id });
-        if (engine.present && !engine.allowed) {
+        // A verified login plus a persisted owner match is sufficient for a
+        // normal self-read. Optional engine context must not turn that valid
+        // owner read into a false denial; writes still fail closed when a
+        // supplied engine context is invalid. Other users were rejected above.
+        if (engine.present && !engine.allowed && req.method !== 'GET') {
           return json(res, engine.status, {
-            error: req.method === 'GET' ? '자료 접근이 거부되었습니다.' : '자료 변경이 거부되었습니다.',
+            error: '자료 변경이 거부되었습니다.',
             reason: engine.reason
           });
         }

@@ -91,6 +91,28 @@ test('verified a@example.com test identity can create and perform ID-specific CR
   assert.equal(afterDelete.statusCode, 404);
 });
 
+test('verified owner self-read remains available when optional engine context rejects the request', async () => {
+  const rows = new Map();
+  const store = {
+    async create(row) { rows.set(row.id, { ...row }); return { data: { ...row }, error: null }; },
+    async findById(id) { const row = rows.get(id); return { data: row ? { ...row } : null, error: null }; },
+    async update() { return { data: null, error: null }; },
+    async delete() { return { data: null, error: null }; },
+  };
+  const handlers = createMemoApiHandlers({
+    verifyLoginAuthorization: async () => tokenUsers.get('token-a'),
+    getStore: async () => store,
+    authorizeEngine: async () => ({ present: true, allowed: false, status: 403, reason: 'ENGINE_DENIED' }),
+  });
+  const created = await call(handlers.collection, {
+    method: 'POST', url: '/api/notes', body: { title: '자기 메모', body: '정상 읽기' }
+  });
+  assert.equal(created.statusCode, 201);
+  const read = await call(handlers.item, { method: 'GET', url: `/api/notes/${created.body.id}`, id: created.body.id });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.body.body, '정상 읽기');
+});
+
 test('another verified user cannot read, update, or delete the owner memo', async () => {
   const { handlers, rows } = createHarness();
   const created = await call(handlers.collection, {
