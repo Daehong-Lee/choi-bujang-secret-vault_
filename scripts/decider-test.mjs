@@ -24,8 +24,23 @@ export async function checkDecider({ decide, ruleIds }) {
     throw new Error('6단계 device_registered 규칙을 먼저 구현하고 RULE_IDS에 적어 주세요.');
   }
   const { normal, suspicious } = fixtureRequests();
+  const apiDetailGet = {
+    ...normal,
+    requestId: randomUUID(),
+    path: normal.path.replace('/notes/', '/api/notes/'),
+    route: 'GET /api/notes/:id',
+    signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null },
+  };
+  const collectionGet = {
+    ...normal,
+    requestId: randomUUID(),
+    path: '/api/notes',
+    route: 'GET /api/notes',
+  };
   const checks = [
     { name: '등록 기기의 정상 요청', request: normal, decision: 'allow' },
+    { name: 'API 접두사가 있는 정상 메모 상세 GET', request: apiDetailGet, decision: 'allow' },
+    { name: 'ID 없는 메모 목록 GET은 계속 거부', request: collectionGet, decision: 'deny', reasonCode: 'starter_not_ready' },
     { name: '미등록 기기의 가상 요청', request: { ...normal, requestId: randomUUID(),
       deviceRegistered: false }, decision: 'deny', reasonCode: 'device_not_registered' },
   ];

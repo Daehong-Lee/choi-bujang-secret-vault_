@@ -95,6 +95,14 @@ export async function decide(request) {
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
 
   const memoPath = /^\/notes\/([^/]+)$/u.exec(canonicalPath);
+  // The app's deployed detail endpoint is /api/notes/:id, while older engine
+  // fixtures use /notes/:id. Explicitly recognize this exact GET alias rather
+  // than broadening collection or other unknown routes.
+  const apiPrefixedMemoDetailGet = request.service === 'notes'
+    && request.method === 'GET'
+    && request.path.startsWith('/api/notes/')
+    && /^\/api\/notes\/[^/]+$/u.test(request.path)
+    && request.route === 'GET /api/notes/:id';
   const memoCreateRoute = request.service === 'notes'
     && canonicalPath === '/notes'
     && request.method === 'POST'
@@ -107,7 +115,7 @@ export async function decide(request) {
   const memoRouteMatches = Boolean(memoPath)
     && canonicalPath !== '/notes/export'
     && request.service === 'notes'
-    && canonicalRoute === `${request.method} /notes/:id`
+    && (canonicalRoute === `${request.method} /notes/:id` || apiPrefixedMemoDetailGet)
     && ['GET', 'PUT', 'DELETE'].includes(request.method);
   const announcementReadMatches = request.service === 'announcements'
     && ((Boolean(announcementPath)

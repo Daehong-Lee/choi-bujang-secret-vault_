@@ -1,35 +1,24 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createClient } from '@supabase/supabase-js';
+import { createLoginVerifier } from '../src/verify-login.mjs';
 import { createMemoApiHandlers } from '../src/memo-api-handlers.mjs';
 import { authorizeWithEngine } from '../src/engine-authorization.mjs';
-import { databaseFailureReason } from '../src/database-errors.mjs';
-import { getApiRuntime, respondRuntimeError } from '../src/api-runtime.mjs';
 
-function json(res, status, body) {
-  res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.end(JSON.stringify(body));
-}
+const root = process.cwd();
+const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+const verifyLoginAuthorization = createLoginVerifier({ config, supabaseSecretKey });
 
-function createHandlers(runtime) {
-  async function getStore() {
-    const supabase = runtime.createSupabase();
-    return {
-      create: (row) => supabase.from('learning_notes').insert(row)
-        .select('id, resource_type, title, body, owner_id').single(),
-    };
-  }
-  return createMemoApiHandlers({
-    verifyLoginAuthorization: runtime.verifyLoginAuthorization,
-    getStore,
-    authorizeEngine: authorizeWithEngine,
-    databaseFailureReason,
+async function getStore() {
+  const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
   });
+  return {
+    create: (row) => supabase.from('learning_notes').insert(row)
+      .select('id, resource_type, title, body, owner_id').single(),
+  };
 }
 
-export default async function handler(req, res) {
-  try {
-    const runtime = await getApiRuntime();
-    return await createHandlers(runtime).collection(req, res);
-  } catch (error) {
-    return respondRuntimeError(res, error);
-  }
-}
+const handlers = createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine: authorizeWithEngine });
+export default handlers.collection;

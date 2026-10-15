@@ -1,10 +1,16 @@
-import { databaseFailureReason } from '../src/database-errors.mjs';
-import { getApiRuntime, respondRuntimeError } from '../src/api-runtime.mjs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createLoginVerifier } from '../src/verify-login.mjs';
+import { createClient } from '@supabase/supabase-js';
 import { authorizeAnnouncementCreate } from '../src/resource-access.mjs';
+
+const root = process.cwd();
+const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+const verifyLoginAuthorization = createLoginVerifier({ config, supabaseSecretKey });
 
 function json(res, status, body) {
   res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(body));
 }
 
@@ -29,16 +35,15 @@ export default async function handler(req, res) {
     return json(res, 405, { error: 'Method Not Allowed' });
   }
 
-  let runtime;
-  try { runtime = await getApiRuntime(); }
-  catch (error) { return respondRuntimeError(res, error); }
-  const identity = await runtime.verifyLoginAuthorization(req.headers.authorization);
+  const identity = await verifyLoginAuthorization(req.headers.authorization);
   if (!identity?.userId) {
     return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   }
 
   try {
-    const supabase = runtime.createSupabase();
+    const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
 
     if (req.method === 'GET') {
       const { data, error } = await supabase
@@ -47,7 +52,7 @@ export default async function handler(req, res) {
         .eq('resource_type', 'announcement')
         .order('id', { ascending: true });
 
-      if (error) return json(res, 500, { error: '강사 공지를 불러오지 못했습니다.', reason: databaseFailureReason(error) });
+      if (error) return json(res, 500, { error: '강사 공지를 불러오지 못했습니다.' });
       return json(res, 200, (data ?? []).map(noteView));
     }
 
@@ -74,12 +79,12 @@ export default async function handler(req, res) {
 
     if (error) {
       if (error.code === '23505') return json(res, 409, { error: '이미 존재하는 id입니다.' });
-      return json(res, 500, { error: '강사 공지를 등록하지 못했습니다.', reason: databaseFailureReason(error) });
+      return json(res, 500, { error: '강사 공지를 등록하지 못했습니다.' });
     }
 
     return json(res, 201, { id, resourceType: 'announcement' });
   } catch (error) {
     if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
-    return json(res, 500, { error: '자료를 처리하지 못했습니다.', reason: databaseFailureReason(error) });
+    return json(res, 500, { error: '자료를 처리하지 못했습니다.' });
   }
 }
