@@ -95,14 +95,6 @@ export async function decide(request) {
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
 
   const memoPath = /^\/notes\/([^/]+)$/u.exec(canonicalPath);
-  // The app's deployed detail endpoint is /api/notes/:id, while older engine
-  // fixtures use /notes/:id. Explicitly recognize this exact GET alias rather
-  // than broadening collection or other unknown routes.
-  const apiPrefixedMemoDetailGet = request.service === 'notes'
-    && request.method === 'GET'
-    && request.path.startsWith('/api/notes/')
-    && /^\/api\/notes\/[^/]+$/u.test(request.path)
-    && request.route === 'GET /api/notes/:id';
   const memoCreateRoute = request.service === 'notes'
     && canonicalPath === '/notes'
     && request.method === 'POST'
@@ -112,11 +104,18 @@ export async function decide(request) {
     && request.method === 'GET'
     && request.service === 'announcements'
     && canonicalRoute === 'GET /announcements';
-  const memoRouteMatches = Boolean(memoPath)
+  // Explicitly recognize the ordinary, ID-specific memo read route.
+  // This grants route access only; the API still verifies the persisted owner.
+  const memoDetailReadMatches = Boolean(memoPath)
     && canonicalPath !== '/notes/export'
     && request.service === 'notes'
-    && (canonicalRoute === `${request.method} /notes/:id` || apiPrefixedMemoDetailGet)
-    && ['GET', 'PUT', 'DELETE'].includes(request.method);
+    && request.method === 'GET'
+    && canonicalRoute === 'GET /notes/:id';
+  const memoRouteMatches = memoDetailReadMatches || (Boolean(memoPath)
+    && canonicalPath !== '/notes/export'
+    && request.service === 'notes'
+    && canonicalRoute === `${request.method} /notes/:id`
+    && ['PUT', 'DELETE'].includes(request.method));
   const announcementReadMatches = request.service === 'announcements'
     && ((Boolean(announcementPath)
         && request.method === 'GET'
@@ -146,6 +145,12 @@ export async function decide(request) {
         decision: 'step_up', reasonCode: 'step_up_required', ruleIds: ['step_up_required'] };
     }
     return allow(request, ['device_registered', 'step_up_required']);
+  }
+
+  // Explicit allow for the normal registered-device detail GET, after any
+  // required step-up check above. Collection GETs and other zones never reach here.
+  if (memoDetailReadMatches) {
+    return allow(request, ['device_registered', 'exact_resource_route']);
   }
 
   return allow(request, ['device_registered', 'exact_resource_route']);

@@ -24,23 +24,26 @@ export async function checkDecider({ decide, ruleIds }) {
     throw new Error('6단계 device_registered 규칙을 먼저 구현하고 RULE_IDS에 적어 주세요.');
   }
   const { normal, suspicious } = fixtureRequests();
-  const apiDetailGet = {
+  const ordinaryDetailGet = {
     ...normal,
     requestId: randomUUID(),
-    path: normal.path.replace('/notes/', '/api/notes/'),
-    route: 'GET /api/notes/:id',
-    signals: { source: 'none', region: 'unknown', network: 'unknown', hour: null },
-  };
-  const collectionGet = {
-    ...normal,
-    requestId: randomUUID(),
-    path: '/api/notes',
-    route: 'GET /api/notes',
+    method: 'GET',
+    path: '/notes/virtual-memo-1',
+    route: 'GET /notes/:id',
+    // Production-style signals, not the judge's unusual-access fixture.
+    signals: { source: 'none', region: 'unknown', network: 'unknown', hour: 'unknown' },
+    // The decider must not compare owners; the API checks the stored owner.
+    resourceOwnerSubjectId: 'different-owner-fixture',
   };
   const checks = [
     { name: '등록 기기의 정상 요청', request: normal, decision: 'allow' },
-    { name: 'API 접두사가 있는 정상 메모 상세 GET', request: apiDetailGet, decision: 'allow' },
-    { name: 'ID 없는 메모 목록 GET은 계속 거부', request: collectionGet, decision: 'deny', reasonCode: 'starter_not_ready' },
+    { name: '등록 기기의 정상 GET /notes/:id 허용', request: ordinaryDetailGet, decision: 'allow' },
+    { name: '메모 목록 GET /notes는 계속 거부', request: { ...ordinaryDetailGet,
+      requestId: randomUUID(), path: '/notes', route: 'GET /notes' }, decision: 'deny', reasonCode: 'starter_not_ready' },
+    { name: '강사 자료 구역은 계속 거부', request: { ...ordinaryDetailGet,
+      requestId: randomUUID(), service: 'instructor-materials',
+      path: '/instructor-materials/handout-1', route: 'GET /instructor-materials/:id' },
+      decision: 'deny', reasonCode: 'starter_not_ready' },
     { name: '미등록 기기의 가상 요청', request: { ...normal, requestId: randomUUID(),
       deviceRegistered: false }, decision: 'deny', reasonCode: 'device_not_registered' },
   ];
