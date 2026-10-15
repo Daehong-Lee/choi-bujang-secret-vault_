@@ -82,10 +82,10 @@ function allow(request, ruleIds) {
 export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
-  // Exact route matching only. Accept the app's /api prefix as an exact alias.
-  // Resource IDs are opaque single path segments; they are not required to be UUIDs.
-  // The deployment allow-list uses /api-prefixed routes; the decision contract
-  // uses service-relative routes. Normalize only this exact prefix.
+  // Exact route matching only. GET /notes/:id and GET /api/notes/:id are
+  // equivalent detail-read routes; /api is accepted only as this exact prefix.
+  // Resource IDs are opaque non-empty single path segments, not UUID-only values.
+  // This does not permit the collection route (/notes or /api/notes) or other zones.
   if (request.path.includes('?') || request.path.includes('#')) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }

@@ -38,10 +38,12 @@ export async function checkDecider({ decide, ruleIds }) {
   const checks = [
     { name: '등록 기기의 정상 요청', request: normal, decision: 'allow' },
     { name: '등록 기기의 정상 GET /notes/:id 허용', request: ordinaryDetailGet, decision: 'allow' },
-    { name: '등록 기기의 배포 경로 GET /api/notes/:id 허용', request: {
-      ...ordinaryDetailGet, requestId: randomUUID(), path: '/api/notes/virtual-memo-2',
-      route: 'GET /api/notes/:id'
-    }, decision: 'allow' },
+    { name: '등록 기기의 정상 GET /api/notes/:id 허용', request: { ...ordinaryDetailGet,
+      requestId: randomUUID(), path: '/api/notes/virtual-memo-1', route: 'GET /api/notes/:id' }, decision: 'allow' },
+    { name: 'UUID가 아닌 단건 메모 ID도 허용', request: { ...ordinaryDetailGet,
+      requestId: randomUUID(), path: '/notes/not-a-uuid', route: 'GET /notes/:id' }, decision: 'allow' },
+    { name: 'API 경로의 UUID가 아닌 단건 메모 ID도 허용', request: { ...ordinaryDetailGet,
+      requestId: randomUUID(), path: '/api/notes/not-a-uuid', route: 'GET /api/notes/:id' }, decision: 'allow' },
     { name: '메모 목록 GET /notes는 계속 거부', request: { ...ordinaryDetailGet,
       requestId: randomUUID(), path: '/notes', route: 'GET /notes' }, decision: 'deny', reasonCode: 'starter_not_ready' },
     { name: '강사 자료 구역은 계속 거부', request: { ...ordinaryDetailGet,
