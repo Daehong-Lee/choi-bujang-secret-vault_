@@ -97,6 +97,12 @@ export async function decide(request) {
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
 
   const memoPath = /^\/notes\/([^/]+)$/u.exec(canonicalPath);
+  // Creating a memo is a distinct POST operation; only GET on the ID-less
+  // collection is a forbidden listing route.
+  const memoCreateRoute = request.service === 'notes'
+    && canonicalPath === '/notes'
+    && request.method === 'POST'
+    && canonicalRoute === 'POST /notes';
   const announcementPath = /^\/announcements\/([^/]+)$/u.exec(canonicalPath);
   const announcementCollection = canonicalPath === '/announcements'
     && request.method === 'GET'
@@ -119,7 +125,7 @@ export async function decide(request) {
       && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }
-  if (!memoRouteMatches && !announcementReadMatches) {
+  if (!memoCreateRoute && !memoRouteMatches && !announcementReadMatches) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }
   if (request.deviceRegistered !== true) return deny(request, 'device_not_registered', ['device_registered']);

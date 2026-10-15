@@ -12,6 +12,7 @@
   "originalApiUrl": "https://zmflojkomojuzhuhrdrr.supabase.co/rest/v1/learning_notes",
   "restoreRoute": null,
   "allowedRoutes": [
+    "POST /api/notes",
     "GET /api/notes/:id",
     "PUT /api/notes/:id",
     "DELETE /api/notes/:id",

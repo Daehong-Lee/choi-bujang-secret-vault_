@@ -73,7 +73,7 @@ test('ID-less memo collection GET is denied and Stage 8 config lists only decide
   assert.match(memoHandlers, /COLLECTION_ROUTE_DENIED/u);
   assert.equal(config.step, 8);
   assert.deepEqual(config.allowedRoutes, [
-    'GET /api/notes/:id', 'PUT /api/notes/:id', 'DELETE /api/notes/:id',
+    'POST /api/notes', 'GET /api/notes/:id', 'PUT /api/notes/:id', 'DELETE /api/notes/:id',
     'GET /api/announcements', 'GET /api/announcements/:id',
   ]);
   assert.match(contract, /UUID 형식으로 제한하지 않습니다/u);

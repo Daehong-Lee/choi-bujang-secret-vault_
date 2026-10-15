@@ -35,7 +35,8 @@ test('개별 메모 수정·삭제 경로는 허용하지만 ID 없는 메모 �
   assert.equal((await decide(request({ method: 'PUT', route: 'PUT /notes/:id' }))).decision, 'allow');
   assert.equal((await decide(request({ method: 'DELETE', route: 'DELETE /notes/:id' }))).decision, 'allow');
   assert.equal((await decide(request({ path: '/notes', route: 'GET /notes' }))).decision, 'deny');
-  assert.equal((await decide(request({ method: 'POST', path: '/notes', route: 'POST /notes' }))).decision, 'deny');
+  assert.equal((await decide(request({ method: 'POST', path: '/notes', route: 'POST /notes' }))).decision, 'allow');
+  assert.equal((await decide(request({ method: 'POST', path: '/notes/virtual-memo-1', route: 'POST /notes/:id' }))).decision, 'deny');
 });
 
 test('공지 조회만 허용하고 학생·강사 모두 공지 쓰기는 거부한다', async () => {
