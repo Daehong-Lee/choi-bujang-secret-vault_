@@ -33,8 +33,7 @@
 ### 8단계: 자료별 자원 구역과 경로 허용 규칙
 
 - `learning_notes.resource_type`으로 `memo`와 `announcement`를 구분합니다. 기존 행과 UUID를 유지하며 메모와 공지는 각각 `/api/notes/:id`, `/api/announcements/:id` 경로에서 구분합니다.
-- 판정기는 메모의 `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`와 공지의 `GET /announcements`, `GET /announcements/:id`만 허용합니다. ID 없는 메모 목록, 메모 생성, 공지 쓰기, 강사 자료 구역, 미등록 경로는 판정기에서 거부합니다. 가상 심판 ID는 UUID 형식으로 제한하지 않습니다. 별도 메모 생성 API `POST /api/notes`는 검증된 로그인 토큰을 확인하고 서버가 `owner_id`를 설정합니다.
-- 자원 경로에 `?` 또는 `#`가 포함되면 거부합니다. 쿼리 문자열로 기능을 바꾸거나 경로 뒤에 추가 기능을 붙일 수 없습니다. 로컬 재검증은 `node --test test/*.test.mjs`로 실행합니다.
+- 판정기는 일반 메모 생성 `POST /notes`, 메모의 `GET /notes/:id`, `PUT /notes/:id`, `DELETE /notes/:id`와 공지의 `GET /announcements`, `GET /announcements/:id`만 허용합니다. ID 없는 메모 목록, 공지 쓰기, 강사 자료 구역, 미등록 경로는 판정기에서 거부합니다. 가상 심판 ID는 UUID 형식으로 제한하지 않습니다. 별도 메모 생성 API `POST /api/notes`는 검증된 로그인 토큰을 확인하고 서버가 `owner_id`를 설정합니다.
 - 판정기는 메모 소유권이나 강사 역할을 대신 판단하지 않습니다. 메모 상세 API는 검증된 로그인 사용자와 DB의 `owner_id`를 비교합니다. 공지 쓰기는 판정기 허용 경로가 아니며, 별도 서버 관리 경로에서만 검증된 강사 신원과 DB 소유권을 확인해야 합니다.
 - `aleph.config.json`의 `step`은 8이며 `allowedRoutes`에는 판정기가 허용하는 메서드·경로만 기재합니다. 설정 계약은 `docs/DECIDER_REQUEST.md`를 따릅니다.
 - DB 변경이 필요하면 적용 전에 SQL Editor에서 `supabase/migrate_virtual_notes.sql`을 검토·실행합니다. 저장소 수정만으로 실제 DB에 자동 적용되지는 않습니다.

@@ -83,22 +83,18 @@ export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
   // Exact route matching only. Accept the app's /api prefix as an exact alias.
-  // A query/hash embedded in path must not select a different operation.
   // Resource IDs are opaque single path segments; they are not required to be UUIDs.
+  // The deployment allow-list uses /api-prefixed routes; the decision contract
+  // uses service-relative routes. Normalize only this exact prefix.
   if (request.path.includes('?') || request.path.includes('#')) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }
   const canonicalPath = request.path.startsWith('/api/') ? request.path.slice(4) : request.path;
-  // The deployment contract lists public routes with /api, while the decision
-  // request contract historically uses service-relative routes. Normalize only
-  // this exact prefix so a valid self-resource GET is not denied by alias mismatch.
   const canonicalRoute = request.route.replace(/^(GET|POST|PUT|PATCH|DELETE) \/api\//u, '$1 /');
   if (request.at && (!Number.isFinite(Date.parse(request.at))
       || Math.abs(Date.now() - Date.parse(request.at)) > 5000)) return deny(request, 'stale_engine_request');
 
   const memoPath = /^\/notes\/([^/]+)$/u.exec(canonicalPath);
-  // Creating a memo is a distinct POST operation; only GET on the ID-less
-  // collection is a forbidden listing route.
   const memoCreateRoute = request.service === 'notes'
     && canonicalPath === '/notes'
     && request.method === 'POST'
