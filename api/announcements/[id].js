@@ -1,16 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createLoginVerifier } from '../../src/verify-login.mjs';
-import { createClient } from '@supabase/supabase-js';
+import { databaseFailureReason } from '../../src/database-errors.mjs';
+import { getApiRuntime, respondRuntimeError } from '../../src/api-runtime.mjs';
 import { authorizeAnnouncementWrite } from '../../src/resource-access.mjs';
-
-const root = process.cwd();
-const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
-const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-const verifyLoginAuthorization = createLoginVerifier({ config, supabaseSecretKey });
 
 function json(res, status, body) {
   res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(body));
 }
 
@@ -34,18 +28,19 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'GET, PUT, DELETE');
     return json(res, 405, { error: 'Method Not Allowed', reason: 'METHOD_NOT_ALLOWED' });
   }
-  const identity = await verifyLoginAuthorization(req.headers.authorization);
+  let runtime;
+  try { runtime = await getApiRuntime(); }
+  catch (error) { return respondRuntimeError(res, error); }
+  const identity = await runtime.verifyLoginAuthorization(req.headers.authorization);
   if (!identity?.userId) return json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
   const id = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id;
   if (!validUuid(id)) return json(res, 400, { error: 'id는 UUID여야 합니다.', reason: 'INVALID_RESOURCE_ID' });
 
   try {
-    const supabase = createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
+    const supabase = runtime.createSupabase();
     const { data: existing, error: lookupError } = await supabase.from('learning_notes')
       .select('id, resource_type, title, body, owner_id').eq('id', id).maybeSingle();
-    if (lookupError) return json(res, 500, { error: '강사 공지를 확인하지 못했습니다.', reason: 'RESOURCE_LOOKUP_FAILED' });
+    if (lookupError) return json(res, 500, { error: '강사 공지를 확인하지 못했습니다.', reason: databaseFailureReason(lookupError) });
 
     if (req.method === 'GET') {
       if (!existing || existing.resource_type !== 'announcement') return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND' });
@@ -67,7 +62,7 @@ export default async function handler(req, res) {
         title: input.title, body: input.body,
       }).eq('id', id).eq('resource_type', 'announcement').eq('owner_id', identity.userId)
         .select('id, resource_type, title, body, owner_id').maybeSingle();
-      if (error) return json(res, 500, { error: '강사 공지를 수정하지 못했습니다.', reason: 'RESOURCE_UPDATE_FAILED' });
+      if (error) return json(res, 500, { error: '강사 공지를 수정하지 못했습니다.', reason: databaseFailureReason(error) });
       if (!data || data.owner_id !== identity.userId || data.resource_type !== 'announcement') {
         return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
       }
@@ -77,11 +72,12 @@ export default async function handler(req, res) {
     const { data, error } = await supabase.from('learning_notes').delete()
       .eq('id', id).eq('resource_type', 'announcement').eq('owner_id', identity.userId)
       .select('id').maybeSingle();
-    if (error) return json(res, 500, { error: '강사 공지를 삭제하지 못했습니다.', reason: 'RESOURCE_DELETE_FAILED' });
+    if (error) return json(res, 500, { error: '강사 공지를 삭제하지 못했습니다.', reason: databaseFailureReason(error) });
     if (!data) return json(res, 404, { error: '강사 공지를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(204).end();
   } catch (error) {
     if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
-    return json(res, 500, { error: '자료를 처리하지 못했습니다.' });
+    return json(res, 500, { error: '자료를 처리하지 못했습니다.', reason: 'DATABASE_OPERATION_FAILED' });
   }
 }

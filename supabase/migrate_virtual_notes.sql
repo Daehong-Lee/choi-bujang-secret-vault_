@@ -36,7 +36,14 @@ begin
   ) then
     alter table public.learning_notes alter column id drop identity if exists;
     alter table public.learning_notes alter column id drop default;
-    alter table public.learning_notes alter column id type uuid using gen_random_uuid();
+    -- Preserve existing UUID strings. Regenerate only IDs that cannot be cast to UUID.
+    alter table public.learning_notes alter column id type uuid using (
+      case
+        when id::text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then id::text::uuid
+        else gen_random_uuid()
+      end
+    );
     alter table public.learning_notes alter column id set default gen_random_uuid();
   end if;
 end
@@ -69,7 +76,9 @@ alter table public.learning_notes enable row level security;
 
 -- 브라우저의 anon/authenticated 역할에는 직접 자료 권한을 주지 않습니다.
 -- 서버 API만 SUPABASE_SECRET_KEY로 접근합니다.
-revoke all on table public.learning_notes from anon, authenticated;
+revoke all on table public.learning_notes from public, anon, authenticated;
+-- Ensure the server-only Supabase key's service_role can use the API table.
+grant select, insert, update, delete on table public.learning_notes to service_role;
 
 -- 기존 2단계의 가상 메모 네 건을 유지합니다.
 insert into public.learning_notes (owner_id, title, body)

@@ -1,6 +1,33 @@
-// 9단계에서 학생이 채우는 탐지 함수입니다. 이 기본값은 어떤 접속도 회수하지 않습니다.
-// 반 엔진이 검증한 사건만 전달해야 하며, 브라우저가 보낸 사용자 번호는 받지 않습니다.
+// 9단계 로컬 탐지 연습. 운영 반 엔진이 검증한 사건을 전달하는 연결은 별도입니다.
+const WINDOW_MS = 10 * 60 * 1000;
+const LIMIT = 120;
+const OBSERVE = Object.freeze({ action: 'observe' });
+
 export function detect(events) {
   if (!Array.isArray(events)) throw new TypeError('invalid_detection_events');
-  return { action: 'observe' };
+
+  const bySubject = new Map();
+  for (const event of events) {
+    if (!event || typeof event !== 'object' || Array.isArray(event)
+        || event.method !== 'GET' || typeof event.at !== 'string'
+        || typeof event.identity?.sub !== 'string' || !event.identity.sub) continue;
+    const at = Date.parse(event.at);
+    if (!Number.isFinite(at)) continue;
+    const subject = event.identity.sub;
+    const bucket = bySubject.get(subject) ?? [];
+    bucket.push(at);
+    bySubject.set(subject, bucket);
+  }
+
+  for (const [subject, timestamps] of bySubject) {
+    timestamps.sort((a, b) => a - b);
+    let start = 0;
+    for (let end = 0; end < timestamps.length; end += 1) {
+      while (timestamps[end] - timestamps[start] > WINDOW_MS) start += 1;
+      if (end - start + 1 > LIMIT) {
+        return { action: 'propose_revocation', reasonCode: 'burst_read', subject };
+      }
+    }
+  }
+  return { ...OBSERVE };
 }

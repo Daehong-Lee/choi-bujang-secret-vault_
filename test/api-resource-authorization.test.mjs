@@ -27,9 +27,13 @@ test('resource APIs use verifier identity and stored resource ownership, not bod
   const paths = ['api/notes.js', 'api/notes/[id].js', 'api/announcements.js', 'api/announcements/[id].js'];
   const source = await Promise.all(paths.map(path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')));
   for (const code of source) {
-    assert.match(code, /createLoginVerifier/u);
+    assert.match(code, /getApiRuntime/u);
     assert.doesNotMatch(code, /input\.role|body\.role/u);
   }
+  const runtime = await readFile(new URL('../src/api-runtime.mjs', import.meta.url), 'utf8');
+  assert.match(runtime, /createLoginVerifier/u);
+  assert.match(runtime, /SUPABASE_SECRET_KEY_MISSING/u);
+  assert.match(runtime, /SUPABASE_URL_ISSUER_MISMATCH/u);
   const memoHandlers = await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8');
   assert.match(memoHandlers, /reason: 'AUTH_REQUIRED'/u);
   assert.match(memoHandlers, /authorizeMemoOwner\(identity, existing\)/u);

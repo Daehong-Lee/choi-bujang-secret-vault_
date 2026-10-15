@@ -2,6 +2,7 @@ import { authorizeMemoOwner } from './resource-access.mjs';
 
 function json(res, status, body) {
   res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(body));
 }
 
@@ -20,7 +21,8 @@ function noteView(note) {
   return { id: note.id, resourceType: note.resource_type ?? 'memo', title: note.title, body: note.body };
 }
 
-export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine }) {
+export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine,
+  databaseFailureReason = () => 'DATABASE_OPERATION_FAILED' }) {
   async function getIdentity(req, res) {
     const identity = await verifyLoginAuthorization(req.headers?.authorization);
     if (!identity?.userId) {
@@ -64,13 +66,13 @@ export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, auth
       });
       if (error) {
         if (error.code === '23505') return json(res, 409, { error: '이미 존재하는 id입니다.', reason: 'RESOURCE_ID_CONFLICT' });
-        return json(res, 500, { error: '자료를 추가하지 못했습니다.', reason: 'RESOURCE_CREATE_FAILED' });
+        return json(res, 500, { error: '자료를 추가하지 못했습니다.', reason: databaseFailureReason(error) });
       }
       if (!data) return json(res, 500, { error: '추가 결과를 확인하지 못했습니다.', reason: 'RESOURCE_CREATE_UNCONFIRMED' });
       return json(res, 201, noteView(data));
     } catch (error) {
       if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
-      return json(res, 500, { error: '자료를 처리하지 못했습니다.' });
+      return json(res, 500, { error: '자료를 처리하지 못했습니다.', reason: databaseFailureReason(error) });
     }
   }
 
@@ -87,7 +89,7 @@ export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, auth
     try {
       const store = await getStore();
       const { data: existing, error: lookupError } = await store.findById(id);
-      if (lookupError) return json(res, 500, { error: '자료를 확인하지 못했습니다.', reason: 'RESOURCE_LOOKUP_FAILED' });
+      if (lookupError) return json(res, 500, { error: '자료를 확인하지 못했습니다.', reason: databaseFailureReason(lookupError) });
       const access = authorizeMemoOwner(identity, existing);
       if (!access.allowed) {
         return json(res, access.status === 401 ? 401 : 404,
@@ -124,19 +126,20 @@ export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, auth
         const { data, error } = await store.update(id, identity.userId, {
           title: input.title.trim(), body: input.body
         });
-        if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.', reason: 'RESOURCE_UPDATE_FAILED' });
+        if (error) return json(res, 500, { error: '자료를 수정하지 못했습니다.', reason: databaseFailureReason(error) });
         const updatedAccess = authorizeMemoOwner(identity, data);
         if (!updatedAccess.allowed) return json(res, 404, { error: '자료를 찾을 수 없습니다.', reason: updatedAccess.reason });
         return json(res, 200, noteView(data));
       }
 
       const { data, error } = await store.delete(id, identity.userId);
-      if (error) return json(res, 500, { error: '자료를 삭제하지 못했습니다.', reason: 'RESOURCE_DELETE_FAILED' });
+      if (error) return json(res, 500, { error: '자료를 삭제하지 못했습니다.', reason: databaseFailureReason(error) });
       if (!data) return json(res, 404, { error: '자료를 찾을 수 없습니다.', reason: 'RESOURCE_NOT_FOUND_OR_FORBIDDEN' });
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(204).end();
     } catch (error) {
       if (error instanceof SyntaxError) return json(res, 400, { error: 'JSON 형식이 올바르지 않습니다.' });
-      return json(res, 500, { error: '자료를 처리하지 못했습니다.' });
+      return json(res, 500, { error: '자료를 처리하지 못했습니다.', reason: databaseFailureReason(error) });
     }
   }
 

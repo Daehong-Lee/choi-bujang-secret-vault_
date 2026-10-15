@@ -12,6 +12,9 @@ test('메모와 공지는 같은 UUID 공간에서 resource_type으로 분리되
   const announcementById = await read('api/announcements/[id].js');
 
   assert.match(migration, /resource_type text not null default 'memo'/u);
+  assert.match(migration, /then id::text::uuid/u);
+  assert.match(migration, /revoke all on table public\.learning_notes from public, anon, authenticated/u);
+  assert.match(migration, /grant select, insert, update, delete on table public\.learning_notes to service_role/u);
   assert.match(migration, /check \(resource_type in \('memo', 'announcement'\)\)/u);
   const memoHandlers = await read('src/memo-api-handlers.mjs');
   assert.match(memoHandlers, /reason: 'COLLECTION_ROUTE_DENIED'/u);

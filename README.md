@@ -151,6 +151,23 @@ export const SUPABASE_PUBLISHABLE_KEY = '[ ]';
 
 로그인 화면만으로 API 권한이 보장되지는 않습니다. 현재 API는 각 요청에서 토큰을 검증하고, 자원별 API에서는 저장된 소유권을 다시 확인해야 합니다. 8단계 정책상 ID 없는 메모 목록 GET은 거부됩니다.
 
+
+### API 오류 확인
+
+서버 함수는 환경변수가 빠져도 모듈 시작 단계에서 바로 죽지 않고, 응답에 비밀값을 포함하지 않는 `reason` 코드를 돌려줍니다. 로컬 자동 검사는 `npm test`로 실행합니다. 브라우저 개발자 도구(F12) → **Network** → 실패한 `/api/notes` 요청 → **Response**에서 다음 코드를 확인하세요.
+
+- `SUPABASE_URL_MISSING` 또는 `SUPABASE_SECRET_KEY_MISSING`: Vercel의 **Settings → Environment Variables**에서 해당 이름이 실제 배포 환경(Production 등)에 등록됐는지 확인하고 새 배포를 만듭니다.
+- `SUPABASE_URL_ISSUER_MISMATCH`: 서버 `SUPABASE_URL`과 `aleph.config.json`의 `identityProvider.issuer`가 같은 Supabase 프로젝트인지 확인합니다.
+- `DATABASE_PERMISSION_DENIED`: SQL Editor에서 `supabase/migrate_virtual_notes.sql` 실행 여부와 `service_role` 권한을 확인합니다.
+- `DATABASE_API_KEY_REJECTED`: 서버 전용 키가 올바른 Supabase 프로젝트의 키인지 확인합니다. 키 값은 채팅이나 로그에 붙여넣지 않습니다.
+- `DATABASE_TABLE_MISSING` 또는 `DATABASE_COLUMN_MISSING`: 마이그레이션 적용 여부와 `learning_notes`의 `resource_type`, `body`, `owner_id` 열을 확인합니다.
+
+Response 내용만 공유하세요. **Request Headers의 Authorization, 쿠키, 비밀번호, 키는 공유하지 마세요.** 이 코드는 설정 원인을 구분하기 위한 안내이며, 실제 Vercel 환경변수나 Supabase DB를 대신 변경하지 않습니다.
+
+### 9단계 로컬 탐지 연습
+
+`npm run detect:test`는 같은 가상 사용자에 대해 10분 구간에서 GET 조회가 120건을 초과할 때만 회수 제안을 반환하는지 검사합니다. 다른 사용자와 POST 요청은 합산하지 않습니다. 이 함수는 로컬 가상 사건용이며 운영 엔진의 사건 전달이나 실제 계정 회수 연결을 의미하지 않습니다.
+
 ## `device_registered` 규칙 확인 순서
 
 이 단계에서는 별도로 설치할 접속 프로그램이 없습니다. 저장소 폴더에서 아래 명령만 실행합니다.

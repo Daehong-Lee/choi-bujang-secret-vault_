@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "build": "node scripts/build-public.mjs",
     "test:r5": "node --test test/r5.test.mjs",
     "test:package": "node --test test/package-starter.test.mjs",
@@ -15,5 +16,8 @@
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
     "jose": "6.2.12"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
