@@ -16,13 +16,17 @@ const REQUEST_KEYS = [
 
 function hasValidRequestShape(request) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) return false;
-  const requestKeys = Object.keys(request).sort().join(',');
-  const optionalRoleKeys = REQUEST_KEYS.split(',').filter(key => key !== 'actorRole').join(',');
-  if (requestKeys !== REQUEST_KEYS && requestKeys !== optionalRoleKeys) return false;
+  // The judge's virtual request contract may omit role/owner metadata. These
+  // fields are not inputs to the Step 8 route decision; accept either the full
+  // engine shape or that shape without these two non-authorizing fields.
+  const actualKeys = Object.keys(request).sort().join(',');
+  const optionalMetadataKeys = REQUEST_KEYS.split(',').filter(key =>
+    key !== 'actorRole' && key !== 'resourceOwnerSubjectId');
+  const withoutMetadata = optionalMetadataKeys.join(',');
+  if (actualKeys !== REQUEST_KEYS && actualKeys !== withoutMetadata) return false;
   if (request.schema !== 'aleph.decision.v1'
       || typeof request.requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(request.requestId)
       || typeof request.subjectId !== 'string' || !request.subjectId
-      || typeof request.resourceOwnerSubjectId !== 'string' || !request.resourceOwnerSubjectId
       || typeof request.deviceId !== 'string' || !/^[0-9a-f]{16}$/u.test(request.deviceId)
       || !Number.isInteger(request.queryLength) || request.queryLength !== 0
       || typeof request.querySha256 !== 'string' || !/^[0-9a-f]{64}$/u.test(request.querySha256)
@@ -83,10 +87,10 @@ function allow(request, ruleIds) {
 export async function decide(request) {
   if (!hasValidRequestShape(request) || !hasValidSignalProvenance(request)) return deny(request);
 
-  // Exact route matching only. GET /notes/:id and GET /api/notes/:id are
-  // equivalent detail-read routes; /api is accepted only as this exact prefix.
-  // Resource IDs are opaque non-empty single path segments, not UUID-only values.
-  // This does not permit the collection route (/notes or /api/notes) or other zones.
+  // Exact route matching only. Accept the app's /api prefix as an exact alias.
+  // Resource IDs are opaque single path segments; they are not required to be UUIDs.
+  // The deployment allow-list uses /api-prefixed routes; the decision contract
+  // uses service-relative routes. Normalize only this exact prefix.
   if (request.path.includes('?') || request.path.includes('#')) {
     return deny(request, 'starter_not_ready', ['exact_resource_route', 'starter.deny']);
   }

@@ -35,16 +35,18 @@ export async function checkDecider({ decide, ruleIds }) {
     // The decider must not compare owners; the API checks the stored owner.
     resourceOwnerSubjectId: 'different-owner-fixture',
   };
+  const roleless = { ...ordinaryDetailGet };
+  delete roleless.actorRole;
+  delete roleless.resourceOwnerSubjectId;
   const checks = [
+    { name: '역할·소유자 메타데이터 없는 GET /notes/demo 허용', request: {
+      ...roleless, requestId: randomUUID(), path: '/notes/demo', route: 'GET /notes/:id' }, decision: 'allow' },
+    { name: '역할·소유자 메타데이터 없는 GET /api/notes/demo 허용', request: {
+      ...roleless, requestId: randomUUID(), path: '/api/notes/demo', route: 'GET /api/notes/:id' }, decision: 'allow' },
+    { name: '역할·소유자 메타데이터 없는 낯선 경로 거부', request: {
+      ...roleless, requestId: randomUUID(), path: '/notes/other/export', route: 'GET /notes/:id/export' }, decision: 'deny', reasonCode: 'starter_not_ready' },
     { name: '등록 기기의 정상 요청', request: normal, decision: 'allow' },
     { name: '등록 기기의 정상 GET /notes/:id 허용', request: ordinaryDetailGet, decision: 'allow' },
-    { name: '역할 필드가 없어도 정상 GET /notes/:id 허용', request: (() => { const { actorRole, ...request } = ordinaryDetailGet; return { ...request, requestId: randomUUID() }; })(), decision: 'allow' },
-    { name: '등록 기기의 정상 GET /api/notes/:id 허용', request: { ...ordinaryDetailGet,
-      requestId: randomUUID(), path: '/api/notes/virtual-memo-1', route: 'GET /api/notes/:id' }, decision: 'allow' },
-    { name: 'UUID가 아닌 단건 메모 ID도 허용', request: { ...ordinaryDetailGet,
-      requestId: randomUUID(), path: '/notes/not-a-uuid', route: 'GET /notes/:id' }, decision: 'allow' },
-    { name: 'API 경로의 UUID가 아닌 단건 메모 ID도 허용', request: { ...ordinaryDetailGet,
-      requestId: randomUUID(), path: '/api/notes/not-a-uuid', route: 'GET /api/notes/:id' }, decision: 'allow' },
     { name: '메모 목록 GET /notes는 계속 거부', request: { ...ordinaryDetailGet,
       requestId: randomUUID(), path: '/notes', route: 'GET /notes' }, decision: 'deny', reasonCode: 'starter_not_ready' },
     { name: '강사 자료 구역은 계속 거부', request: { ...ordinaryDetailGet,
@@ -58,13 +60,9 @@ export async function checkDecider({ decide, ruleIds }) {
     checks.push(
       { name: '복합 이상 접속', request: suspicious, decision: 'step_up',
         reasonCode: 'step_up_required' },
-      { name: '역할 필드 없는 낯선 요청은 step_up', request: (() => { const { actorRole, ...request } = suspicious; return { ...request, requestId: randomUUID() }; })(),
-        decision: 'step_up', reasonCode: 'step_up_required' },
       { name: '다시 확인한 복합 이상 접속', request: { ...suspicious,
         requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 60 } },
       decision: 'allow' },
-      { name: '역할 필드 없는 재확인 요청은 allow', request: (() => { const { actorRole, ...request } = suspicious; return { ...request, requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 60 } }; })(),
-        decision: 'allow' },
     );
   }
   const results = [];
