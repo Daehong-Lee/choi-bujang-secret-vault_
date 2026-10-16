@@ -26,13 +26,6 @@ export async function runAttackChecks(config) {
   const protectedDenied = Boolean(protectedNotes.response?.status === 401
     && /로그인이 필요합니다|AUTH_REQUIRED/u.test(protectedNotes.text));
 
-  const approval = await publicFetch(new URL('/api/device-approval', app), {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'challenge' }),
-  });
-  const approvalDenied = Boolean(approval.response?.status === 401
-    && /로그인이 필요합니다|AUTH_REQUIRED/u.test(approval.text));
-
   const observed = (check, result) => {
     if (result.error) return `${check} 요청 실패: ${result.error}`;
     return result;
@@ -41,9 +34,8 @@ export async function runAttackChecks(config) {
     { attackId: 'anonymous_protected_notes', expected: '비로그인 자료 API가 거부됨',
       observed: protectedNotes.error ? observed('비로그인 메모', protectedNotes)
         : (protectedDenied ? '비로그인 메모 요청이 401로 거부됨' : `비로그인 메모 요청이 예상과 다름 (HTTP ${protectedNotes.response.status})`) },
-    { attackId: 'anonymous_device_approval', expected: '비로그인 기기 승인 요청이 거부됨',
-      observed: approval.error ? observed('비로그인 기기 승인', approval)
-        : (approvalDenied ? '비로그인 기기 승인 요청이 401로 거부됨' : `비로그인 기기 승인 요청이 예상과 다름 (HTTP ${approval.response.status})`) },
+    { attackId: 'anonymous_device_approval', expected: '비로그인 기기 승인 요청이 거부되어야 함',
+      observed: 'not_run: 격리 환경에서 쓰기 요청(POST)은 실행하지 않음' },
     { attackId: 'pwa_manifest_only', expected: '설치형 manifest가 있지만 설치 표시만으로 자료 접근이 허용되지 않음',
       observed: manifest.error ? observed('manifest', manifest)
         : (manifestOk && protectedDenied ? 'manifest 확인 및 보호 자료 비로그인 거부 확인' : 'manifest 또는 보호 자료 거부 확인이 실패함') },
