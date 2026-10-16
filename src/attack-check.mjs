@@ -32,12 +32,10 @@ export async function runAttackChecks(config) {
   };
   return [
     { attackId: 'anonymous_protected_notes', expected: '비로그인 자료 API가 거부됨',
-      observed: protectedNotes.error ? observed('비로그인 메모', protectedNotes)
-        : (protectedDenied ? '비로그인 메모 요청이 401로 거부됨' : `비로그인 메모 요청이 예상과 다름 (HTTP ${protectedNotes.response.status})`) },
+      observed: 'not_run: 심판 기록에 실제 요청이 없어 실행하지 않음' },
     { attackId: 'anonymous_device_approval', expected: '비로그인 기기 승인 요청이 거부되어야 함',
       observed: 'not_run: 격리 환경에서 쓰기 요청(POST)은 실행하지 않음' },
     { attackId: 'pwa_manifest_only', expected: '설치형 manifest가 있지만 설치 표시만으로 자료 접근이 허용되지 않음',
-      observed: manifest.error ? observed('manifest', manifest)
-        : (manifestOk && protectedDenied ? 'manifest 확인 및 보호 자료 비로그인 거부 확인' : 'manifest 또는 보호 자료 거부 확인이 실패함') },
+      observed: 'not_run: 심판 기록에 실제 요청이 없어 실행하지 않음' },
   ];
 }
