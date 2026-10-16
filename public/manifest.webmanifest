@@ -1,0 +1,12 @@
+{
+  "name": "BYTE BACK 내 자료실",
+  "short_name": "내 자료실",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101a28",
+  "theme_color": "#101a28",
+  "description": "설치형 화면을 제공하지만 설치 표시만으로 기기를 신뢰하지 않고 서버의 등록 기기 확인 후 보호 자료를 엽니다.",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

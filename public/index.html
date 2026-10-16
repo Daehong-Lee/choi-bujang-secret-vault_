@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="vault-build-id" content="login-id-crud-fix-2026-10-14">
   <title>BYTE BACK | 내 자료실</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#101a28">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -27,15 +29,20 @@
     .auth-message { min-height: 1.5em; margin-top: 12px; color: #bfd0e5; }
     .auth-message[data-error="true"] { color: #ffb7c2; }
     .auth-status { margin: 0 0 8px; color: #8ad8df; font-weight: 700; }
+    .device-approval { margin: 26px 0; padding: 20px; border: 1px solid #51667c; border-radius: 14px; background: #152235; }
+    .device-approval button { margin-top: 10px; padding: 10px 14px; border: 0; border-radius: 9px; cursor: pointer; }
+    .device-status { min-height: 1.5em; color: #bfd0e5; }
+    .device-status[data-approved="true"] { color: #9ce7b0; }
+    .device-status[data-error="true"] { color: #ffb7c2; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 3단계 내 자료실</div>
+    <div class="eyebrow">BYTE BACK · 11단계 내 자료실</div>
     <h1>로그인 자료실</h1>
     <p>자료 원본은 저장소에 유지되지만 정적 공개 파일에서는 제거되었습니다. 아래 기록은 모두 실습을 위해 만든 가상 자료입니다.</p>
     <div class="notice">자료는 더 이상 <code>/data.json</code>으로 정적으로 공개되지 않습니다. 로그인한 사용자의 토큰을 서버에서 검사한 뒤 자료 API를 호출합니다.</div>
-    <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨 · 로그인 검증 적용됨 · 소유자 검사는 4단계에서 적용</div>
+    <div class="notice" aria-label="자료 보호 상태">자료 보호 적용됨 · 로그인 검증 · 서버 기기 승인 · 소유자 검사 적용</div>
 
     <section class="auth" aria-labelledby="auth-title">
       <h2 id="auth-title">자료실 로그인</h2>
@@ -49,6 +56,13 @@
       </form>
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <div id="auth-message" class="auth-message" aria-live="polite"></div>
+    </section>
+
+    <section id="device-approval" class="device-approval" aria-labelledby="device-approval-title" hidden>
+      <h2 id="device-approval-title">기기 승인</h2>
+      <p>설치되어 있다는 표시만으로 기기를 신뢰하지 않습니다. 서버에 미리 등록된 보안 키를 이 기기의 인증기로 확인한 뒤에만 자료실을 엽니다.</p>
+      <p id="device-status" class="device-status" aria-live="polite">로그인 후 서버에 기기 등록 여부를 확인합니다.</p>
+      <button id="device-approve-button" type="button">이 기기 승인 요청</button>
     </section>
 
     <section id="note-editor" class="auth" aria-labelledby="note-editor-title" hidden>
@@ -78,6 +92,9 @@
 
       const notes = document.getElementById('notes');
       const editor = document.getElementById('note-editor');
+      const deviceApproval = document.getElementById('device-approval');
+      const deviceStatus = document.getElementById('device-status');
+      const deviceApproveButton = document.getElementById('device-approve-button');
       const form = document.getElementById('note-form');
       const lookupForm = document.getElementById('note-lookup-form');
       const lookupIdInput = document.getElementById('note-lookup-id');
@@ -88,6 +105,8 @@
       const cancelButton = document.getElementById('note-cancel-button');
       const message = document.getElementById('note-message');
       const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+      let deviceApprovalToken = null;
+      let deviceApproved = false;
 
       function showMessage(text, error = false) {
         message.textContent = text;
@@ -158,11 +177,90 @@
         lookupIdInput.value = note.id;
       }
 
+      function setDeviceStatus(text, { approved = false, error = false } = {}) {
+        deviceStatus.textContent = text;
+        deviceStatus.dataset.approved = approved ? 'true' : 'false';
+        deviceStatus.dataset.error = error ? 'true' : 'false';
+      }
+
+      function bytesFromBase64Url(value) {
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+        const binary = atob(padded);
+        return Uint8Array.from(binary, char => char.charCodeAt(0));
+      }
+
+      function base64UrlFromBytes(bytes) {
+        let binary = '';
+        for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '');
+      }
+
+      async function approvalRequest(body, session) {
+        const response = await fetch('/api/device-approval', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body),
+          credentials: 'same-origin'
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(payload?.error || '기기 승인 요청에 실패했습니다.');
+          error.reason = payload?.reason;
+          throw error;
+        }
+        return payload;
+      }
+
+      async function approveDevice() {
+        if (!window.PublicKeyCredential || !navigator.credentials) {
+          throw new Error('이 브라우저는 기기 인증기를 지원하지 않습니다.');
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('로그인이 필요합니다.');
+        const challenge = await approvalRequest({ action: 'challenge' }, session);
+        if (!Array.isArray(challenge.credentialIds) || !challenge.credentialIds.length) {
+          throw new Error('서버에 등록된 승인 기기가 없습니다.');
+        }
+        const credential = await navigator.credentials.get({
+          publicKey: {
+            challenge: bytesFromBase64Url(challenge.challenge),
+            rpId: challenge.rpId,
+            userVerification: 'required',
+            allowCredentials: challenge.credentialIds.map(id => ({ type: 'public-key', id: bytesFromBase64Url(id) }))
+          }
+        });
+        if (!credential) throw new Error('기기 인증이 취소되었습니다.');
+        const assertion = {
+          id: credential.id,
+          rawId: base64UrlFromBytes(credential.rawId),
+          response: {
+            clientDataJSON: base64UrlFromBytes(credential.response.clientDataJSON),
+            authenticatorData: base64UrlFromBytes(credential.response.authenticatorData),
+            signature: base64UrlFromBytes(credential.response.signature),
+            userHandle: credential.response.userHandle ? base64UrlFromBytes(credential.response.userHandle) : null
+          },
+          type: credential.type
+        };
+        const verified = await approvalRequest({
+          action: 'verify', challengeToken: challenge.challengeToken, assertion
+        }, session);
+        deviceApprovalToken = verified.approvalToken;
+        deviceApproved = true;
+        setDeviceStatus('서버가 이 기기를 등록 기기로 확인했습니다. 기존 자료실을 엽니다.', { approved: true });
+        renderSession(session);
+      }
+
       async function apiRequest(path, options = {}) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error('로그인이 필요합니다.');
+        if (!deviceApprovalToken || !deviceApproved) throw new Error('먼저 서버의 기기 승인을 받아야 합니다.');
         const headers = new Headers(options.headers || {});
         headers.set('Authorization', `Bearer ${session.access_token}`);
+        headers.set('X-Device-Approval', deviceApprovalToken);
         if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
         const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
         const body = response.status === 204 ? null : await response.json().catch(() => ({}));
@@ -228,15 +326,45 @@
       });
 
       function renderSession(session) {
-        editor.hidden = !session;
+        deviceApproval.hidden = !session;
+        editor.hidden = !(session && deviceApproved);
         resetEditor();
         showMessage('');
-        showListMessage(session
-          ? '메모 목록 전체 조회는 사용하지 않습니다. 메모 ID를 입력해 조회하거나 새 메모를 추가하세요.'
-          : '로그인하면 메모 ID로 조회하거나 새 메모를 추가할 수 있습니다.');
+        if (!session) {
+          deviceApproved = false;
+          deviceApprovalToken = null;
+          setDeviceStatus('로그인 후 서버에 기기 등록 여부를 확인합니다.');
+          showListMessage('로그인하면 메모 ID로 조회할 수 있으며, 먼저 서버의 기기 승인 화면을 거칩니다.');
+          return;
+        }
+        if (!deviceApproved) {
+          setDeviceStatus('로그인됨 · 아직 서버의 등록 기기 확인이 끝나지 않았습니다.');
+          showListMessage('기기 승인이 완료되기 전에는 보호 자료를 표시하지 않습니다.');
+          return;
+        }
+        showListMessage('메모 목록 전체 조회는 사용하지 않습니다. 메모 ID를 입력해 조회하거나 새 메모를 추가하세요.');
       }
 
-      supabase.auth.onAuthStateChange((_event, session) => renderSession(session));
+      deviceApproveButton.addEventListener('click', async () => {
+        deviceApproveButton.disabled = true;
+        setDeviceStatus('서버에 기기 승인을 요청하고 등록된 보안 키를 확인합니다.');
+        try {
+          await approveDevice();
+        } catch (error) {
+          deviceApproved = false;
+          deviceApprovalToken = null;
+          setDeviceStatus(error.message || '기기 승인이 거부되었습니다.', { error: true });
+          showListMessage('기기 승인이 완료되지 않아 보호 자료를 표시하지 않습니다.');
+        } finally {
+          deviceApproveButton.disabled = false;
+        }
+      });
+
+      supabase.auth.onAuthStateChange((_event, session) => {
+        deviceApproved = false;
+        deviceApprovalToken = null;
+        renderSession(session);
+      });
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) {
         renderSession(null);
@@ -246,6 +374,9 @@
       }
     </script>
     <script type="module" src="/auth.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    </script>
   </main>
 </body>
 </html>

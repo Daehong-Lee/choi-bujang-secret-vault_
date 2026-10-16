@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { createMemoApiHandlers } from '../src/memo-api-handlers.mjs';
 import { authorizeWithEngine } from '../src/engine-authorization.mjs';
+import { verifyDeviceApprovalToken } from '../src/device-approval.mjs';
 
 const root = process.cwd();
 const config = JSON.parse(await readFile(join(root, 'aleph.config.json'), 'utf8'));
@@ -20,5 +21,5 @@ async function getStore() {
   };
 }
 
-const handlers = createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine: authorizeWithEngine });
+const handlers = createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine: authorizeWithEngine, verifyDeviceApproval: verifyDeviceApprovalToken });
 export default handlers.collection;

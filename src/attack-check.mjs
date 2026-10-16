@@ -1,31 +1,51 @@
-// The student changes this check as each stage adds an attack to the same app.
-// Never return tokens, private keys, real names, or note bodies.
-export async function runAttackChecks(config) {
-  if (config.step !== 1) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
-  let app;
+// Step 11 self-checks use only public deployment responses and never return secrets.
+async function publicFetch(url, init) {
   try {
-    app = new URL(config.publicAppUrl);
-  } catch {
-    throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
+    const response = await fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(10000) });
+    return { response, text: await response.text(), error: null };
+  } catch (error) {
+    return { response: null, text: '', error: error?.message || 'fetch failed' };
   }
+}
+
+export async function runAttackChecks(config) {
+  if (config.step < 11) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  let app;
+  try { app = new URL(config.publicAppUrl); }
+  catch { throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.'); }
   if (app.protocol !== 'https:' || app.username || app.password || app.search || app.hash
       || app.pathname !== '/' || app.hostname.endsWith('.example')) {
     throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
   }
-  if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
-  const response = await fetch(new URL('/data.json', app), {
-    redirect: 'error', signal: AbortSignal.timeout(10000),
+
+  const manifest = await publicFetch(new URL('/manifest.webmanifest', app));
+  const manifestOk = Boolean(manifest.response?.ok && /BYTE BACK 내 자료실/u.test(manifest.text)
+    && /standalone/u.test(manifest.text));
+
+  const protectedNotes = await publicFetch(new URL('/api/notes', app), { method: 'GET' });
+  const protectedDenied = Boolean(protectedNotes.response?.status === 401
+    && /로그인이 필요합니다|AUTH_REQUIRED/u.test(protectedNotes.text));
+
+  const approval = await publicFetch(new URL('/api/device-approval', app), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'challenge' }),
   });
-  let visible = false;
-  if (response.ok) {
-    try {
-      const data = await response.json();
-      visible = data?.sampleMarker === config.sampleMarker && Array.isArray(data.notes)
-        && data.notes.length > 0;
-    } catch {
-      // A non-JSON response is a failed check, not a successful deployment.
-    }
-  }
-  return [{ attackId: 'anonymous_note_read', expected: '비로그인 화면에서 가상 메모를 확인',
-    observed: visible ? '비로그인 요청에서 공개 가상 메모 확인 표시가 보임' : `비로그인 요청에서 확인 표시가 보이지 않음 (HTTP ${response.status})` }];
+  const approvalDenied = Boolean(approval.response?.status === 401
+    && /로그인이 필요합니다|AUTH_REQUIRED/u.test(approval.text));
+
+  const observed = (check, result) => {
+    if (result.error) return `${check} 요청 실패: ${result.error}`;
+    return result;
+  };
+  return [
+    { attackId: 'anonymous_protected_notes', expected: '비로그인 자료 API가 거부됨',
+      observed: protectedNotes.error ? observed('비로그인 메모', protectedNotes)
+        : (protectedDenied ? '비로그인 메모 요청이 401로 거부됨' : `비로그인 메모 요청이 예상과 다름 (HTTP ${protectedNotes.response.status})`) },
+    { attackId: 'anonymous_device_approval', expected: '비로그인 기기 승인 요청이 거부됨',
+      observed: approval.error ? observed('비로그인 기기 승인', approval)
+        : (approvalDenied ? '비로그인 기기 승인 요청이 401로 거부됨' : `비로그인 기기 승인 요청이 예상과 다름 (HTTP ${approval.response.status})`) },
+    { attackId: 'pwa_manifest_only', expected: '설치형 manifest가 있지만 설치 표시만으로 자료 접근이 허용되지 않음',
+      observed: manifest.error ? observed('manifest', manifest)
+        : (manifestOk && protectedDenied ? 'manifest 확인 및 보호 자료 비로그인 거부 확인' : 'manifest 또는 보호 자료 거부 확인이 실패함') },
+  ];
 }

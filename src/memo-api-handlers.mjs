@@ -20,12 +20,23 @@ function noteView(note) {
   return { id: note.id, resourceType: note.resource_type ?? 'memo', title: note.title, body: note.body };
 }
 
-export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine }) {
+export function createMemoApiHandlers({ verifyLoginAuthorization, getStore, authorizeEngine, verifyDeviceApproval }) {
   async function getIdentity(req, res) {
     const identity = await verifyLoginAuthorization(req.headers?.authorization);
     if (!identity?.userId) {
       json(res, 401, { error: '로그인이 필요합니다.', reason: 'AUTH_REQUIRED' });
       return null;
+    }
+    if (verifyDeviceApproval) {
+      try {
+        if (!verifyDeviceApproval(req.headers?.['x-device-approval'], identity.userId)) {
+          json(res, 403, { error: '등록 기기 승인이 필요합니다.', reason: 'DEVICE_APPROVAL_REQUIRED' });
+          return null;
+        }
+      } catch (error) {
+        json(res, 503, { error: '기기 승인 서버 설정을 확인할 수 없습니다.', reason: error?.message || 'DEVICE_APPROVAL_UNAVAILABLE' });
+        return null;
+      }
     }
     return identity;
   }
