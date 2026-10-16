@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>BYTE BACK | 탈환 작전실</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin:0; background:#101a28; color:#ecf4ff; }
+    main { max-width:1100px; margin:auto; padding:32px 20px 60px; }
+    .muted { color:#9fb2c9; } .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+    .card, table { background:#152235; border:1px solid #42566e; border-radius:12px; }
+    .card { padding:16px; } .card strong { display:block; margin-bottom:8px; }
+    button { padding:10px 14px; border:0; border-radius:8px; cursor:pointer; }
+    section { margin-top:24px; } h1 { margin-bottom:8px; } h2 { margin-bottom:10px; }
+    table { width:100%; border-collapse:collapse; overflow:hidden; } th,td { padding:10px; border-bottom:1px solid #33475e; text-align:left; vertical-align:top; }
+    th { color:#a9c4de; } .ok { color:#9ce7b0; } .warn { color:#ffd28a; } .bad { color:#ff9eae; }
+    code { overflow-wrap:anywhere; }
+    .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="muted">BYTE BACK · 12단계</p>
+  <h1>탈환 작전실</h1>
+  <p class="muted">성공 문구를 근거로 삼지 않습니다. 서버가 반환한 메타데이터와 실제 HTTP 점검 결과를 구분합니다. 가상 메모 본문과 비밀값은 표시하지 않습니다.</p>
+  <div class="toolbar"><button id="refresh">작전실 새로고침</button><button id="run-checks">공개 API 실측 점검</button><span id="updated" class="muted">미실행</span></div>
+
+  <section><h2>판정 · 탐지 · 회수 · 복구</h2><div id="summary" class="grid"></div></section>
+
+  <section><h2>1~11단계 실측 기록</h2>
+    <p class="muted">이 표의 실측 행은 이 브라우저가 실제로 보낸 HTTP 요청만 기록합니다. 인증이 필요한 정상 사용자 요청은 로그인/승인 후 별도로 실행해야 하며, 여기서 임의로 성공 처리하지 않습니다.</p>
+    <table><thead><tr><th>단계</th><th>구분</th><th>요청 ID</th><th>확인 시각</th><th>HTTP</th><th>관찰 결과</th></tr></thead><tbody id="evidence"></tbody></table>
+  </section>
+
+  <section><h2>41종 총공세</h2>
+    <p class="muted">총공세 41종은 현재 미실행 상태입니다. 아래 목록은 계획을 보여줄 뿐이며, 실행하지 않은 공격을 통과로 표시하지 않습니다.</p>
+    <table><thead><tr><th>공격 ID</th><th>상태</th><th>근거</th></tr></thead><tbody id="attacks"></tbody></table>
+  </section>
+
+  <section><h2>재현 안내</h2><div class="card"><ol>
+    <li><code>npm install</code></li><li><code>npm run decider:test</code> — 가상 판정 연습</li>
+    <li><code>npm run detect:test</code> — 가상 탐지 사건 연습</li>
+    <li>자료실 로그인 → 등록 기기 승인 → 기존 메모 ID 조회로 실제 정상 흐름을 확인합니다.</li>
+    <li><code>npm run bundle</code> — 실제로 실행된 자기 점검만 제출 묶음에 기록합니다.</li>
+  </ol><p class="muted">학생 작업: <code>src/decider.mjs</code>, <code>src/detect.mjs</code>, 접속 앱과 자료실. 제공 엔진/계약: ALEPH SDP 엔진의 계약 및 실행기이며, 로컬 연습 결과는 심판 판정이 아닙니다.</p></div></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const state = { evidence: [] };
+function esc(value) { const d=document.createElement('div'); d.textContent=String(value ?? ''); return d.innerHTML; }
+function renderEvidence() {
+  const planned = Array.from({length:11}, (_,i)=>({stage:i+1, kind:i===11?'normal':'forbidden', expected:'실측 전 미실행'}));
+  const rows = [...planned.map(item=>({stage:item.stage, kind:item.stage===11?'normal':'planned', id:'—', at:'—', http:'—', observed:'미실행'})), ...state.evidence];
+  $('evidence').innerHTML = rows.map(r=>`<tr><td>${esc(r.stage)}</td><td>${esc(r.kind)}</td><td><code>${esc(r.id)}</code></td><td>${esc(r.at)}</td><td>${esc(r.http)}</td><td>${esc(r.observed)}</td></tr>`).join('');
+}
+async function loadRoom() {
+  const response = await fetch('/api/ops-room', {cache:'no-store'});
+  const data = await response.json();
+  $('summary').innerHTML = [
+    `<div class="card"><strong>단계</strong><span class="ok">${esc(data.step)}</span></div>`,
+    `<div class="card"><strong>판정 규칙</strong><span>${data.rules.length}개 · ${esc(data.rules.map(r=>r.ruleId).join(', '))}</span></div>`,
+    `<div class="card"><strong>탐지</strong><span>${data.detection.filter(x=>x.status==='executed').length}/${data.detection.length} 가상 모듈 결과 존재</span></div>`,
+    `<div class="card"><strong>회수/복구</strong><span class="${data.recovery.status==='backup_missing'?'warn':'ok'}">${esc(data.recovery.status)}</span></div>`,
+    `<div class="card"><strong>41종 총공세</strong><span class="warn">실측 미실행</span></div>`
+  ].join('');
+  $('attacks').innerHTML = data.attackPlan.map(a=>`<tr><td>${esc(a.attackId)}</td><td class="warn">미실행</td><td>실제 공격 요청 결과 없음</td></tr>`).join('');
+  $('updated').textContent = `메타데이터 확인 ${new Date(data.generatedAt).toLocaleString()}`;
+  renderEvidence();
+}
+async function check(url, method, stage, kind, expected) {
+  const id = crypto.randomUUID(); const at = new Date().toISOString();
+  try {
+    const response = await fetch(url, {method, headers:{'X-Defense-Request-Id':id}, cache:'no-store'});
+    const text = await response.text();
+    let observed = `HTTP ${response.status}`;
+    if (stage===2 && response.status===401) observed = '비로그인 자료 API가 401로 거부됨';
+    if (stage===11 && response.status===401) observed = '비로그인 기기 승인 요청이 401로 거부됨';
+    if (stage===11 && url.endsWith('/manifest.webmanifest') && response.ok) observed = 'manifest 실제 응답 확인; 설치 표시만으로 권한 부여하지 않음';
+    state.evidence.push({stage, kind, id, at, http:response.status, observed:`${observed} · 응답 길이 ${text.length}바이트`});
+  } catch (error) {
+    state.evidence.push({stage, kind, id, at, http:'요청 실패', observed:error.message});
+  }
+  renderEvidence();
+}
+$('run-checks').onclick = async () => {
+  $('run-checks').disabled = true;
+  try {
+    await check('/api/notes', 'GET', 2, '금지', '비로그인 거부');
+    await check('/api/device-approval', 'POST', 11, '금지', '비로그인 거부');
+    await check('/manifest.webmanifest', 'GET', 11, '정상', 'manifest 응답');
+  } finally { $('run-checks').disabled = false; }
+};
+$('refresh').onclick = () => loadRoom().catch(e => alert(e.message));
+loadRoom().catch(e => { $('summary').textContent = `작전실 조회 실패: ${e.message}`; });
+renderEvidence();
+</script>
+</body>
+</html>
