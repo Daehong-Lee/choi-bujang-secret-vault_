@@ -44,7 +44,7 @@ if (!validAuthConfig()) {
   showMessage('Supabase 설정 오류: public/auth-config.js의 URL과 Publishable Key를 대괄호 없이 입력하세요.', true);
 } else {
   try {
-    supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
   } catch {
     renderAuth(null);
     showMessage('Supabase 설정을 읽지 못했습니다. public/auth-config.js의 Project URL과 Publishable Key를 확인하세요.', true);

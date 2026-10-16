@@ -104,7 +104,7 @@
       const saveButton = document.getElementById('note-save-button');
       const cancelButton = document.getElementById('note-cancel-button');
       const message = document.getElementById('note-message');
-      const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+      const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
       let deviceApprovalToken = null;
       let deviceApproved = false;
 
