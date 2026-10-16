@@ -172,3 +172,48 @@ npm run decider:test
 1. `등록 기기의 정상 요청`이 `통과`인지 확인합니다. 등록된 기기의 자료실 읽기 요청은 `allow`여야 합니다.
 2. `미등록 기기의 가상 요청`이 `통과`인지 확인합니다. 이 검사에서 판정 응답은 `decision: deny`, `reasonCode: device_not_registered`여야 합니다.
 3. 두 결과가 모두 표시되면 로컬 가상 요청 연습을 마칩니다. 이 명령은 실제 미등록 기기 공격을 수행하지 않습니다. 미등록 기기 공격과 실제 접속 판정은 심판이 담당합니다.
+## 10단계: 백업에서 자료실을 되살립니다
+
+`aleph.config.json`의 `step`은 10이며, 메모 복구 경로는 `POST /api/restore/memo`입니다. 이 경로는 로그인 토큰을 검증하고 시험 계정 B의 소유자 ID, 백업 메모 ID, 내용 SHA-256을 대조한 뒤 지정한 한 건만 복구합니다. 다른 메모와 감사 기록은 이 경로에서 수정하지 않습니다.
+
+### 안전 정책 백업 차이 확인 및 시험 정책 복구
+
+- 비교/복구 대상은 `policy-lab/current-policy.json`뿐입니다. `src/decider.mjs` 및 실제 운영 정책은 복구 대상이 아닙니다.
+- 이 ZIP에는 침해 전에 별도 보관하고 검증한 정책 사본이 없습니다. 따라서 `npm run policy:diff`와 `npm run policy:restore`는 현재 `VERIFIED_POLICY_BACKUP_MISSING`으로 실패 종료하는 것이 정상이며, 복구를 강행하지 않습니다.
+- 실제로 검증한 사전 사본을 `policy-lab/backups/pre-incident-policy.json`에, 해당 파일 바이트의 SHA-256을 포함한 `manifest.json`에 준비해야 합니다. `verified: true`는 독립 검증을 실제 수행한 경우에만 설정합니다.
+- 사본이 준비되면 `npm run policy:diff`로 변경 항목과 복구 버전을 먼저 확인합니다. 실제 적용은 목록을 확인한 후 `CONFIRM_POLICY_RESTORE=YES npm run policy:restore`로 시험 정책 파일에만 적용합니다. 운영 정책과 감사 기록은 변경하지 않습니다.
+
+### 비공개 가상 메모 한 건 복구
+
+서버 환경변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `RESTORE_BACKUP_BUCKET`, `RESTORE_BACKUP_OBJECT`, `RESTORE_TEST_OWNER_ID`가 필요합니다. 마지막 값은 시험 계정 B의 실제 Supabase UUID여야 합니다. 이 ZIP에는 실제 계정 B의 비공개 백업이 포함되어 있지 않으므로 실제 복구는 미실행입니다. 키와 계정 정보는 코드나 제출 JSON에 넣지 마세요.
+
+비공개 Storage 객체에는 다음 형식의 JSON 사본을 둡니다. 아래 값은 형식 설명용 가상 값이며 실제 백업이 아닙니다.
+
+```json
+{
+  "schema": "aleph.private-memo-backup.v1",
+  "note": {
+    "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "owner_id": "시험 계정 B의 Supabase UUID",
+    "title": "가상 메모",
+    "body": "시험용 가상 내용",
+    "contentSha256": "id, owner_id, title, body 순서로 JSON 직렬화한 값의 SHA-256"
+  }
+}
+```
+
+POST 본문은 `{ "id": "백업 메모 ID", "contentSha256": "백업 내용 해시", "confirm": "RESTORE_ONE_MEMO" }`입니다. 성공 응답의 `id`, `ownerId`, `contentSha256`를 사본과 대조합니다. ID·소유자·해시가 맞지 않거나 백업 설정이 없으면 복구를 중단합니다.
+
+### 복구 뒤 1~9단계 회귀 시험 순서
+
+이 목록은 실행 순서이며 실행 증거가 아닙니다. 아직 운영 배포와 실제 계정 복구를 실행하지 않았으므로 해당 시험은 **미실행**입니다.
+
+1. `npm run test:recovery` — 정책 백업 누락/해시 불일치 거부와 메모 ID·소유자·해시 검증을 확인합니다.
+2. `npm run decider:test` — 정상 상세 GET 허용, 목록/금지 경로 거부, 미등록 기기 거부를 확인합니다.
+3. `npm run detect:test` — 9단계 가상 사건 형식과 탐지 회귀를 확인합니다.
+4. `npm run test:r5` 및 `npm test` — 기존 테스트 스크립트 정의를 확인한 뒤 실행 가능한 회귀 테스트를 수행합니다. 현재 `npm test`가 정의되어 있지 않으면 미실행으로 기록합니다.
+5. 시험 계정 B로만 `POST /api/restore/memo`를 호출하고, 응답의 ID·소유자·해시가 비공개 사본과 같은지 확인합니다.
+6. A 계정의 정상 메모 조회/변경이 유지되는지 확인하고, B 계정으로 A의 메모를 요청했을 때 `404` 또는 명시적 거부가 나오는지 확인합니다.
+7. 복구 후 같은 정상·금지 요청을 다시 실행합니다. 결과를 실제 응답으로 기록하고 실행하지 않은 항목은 미실행으로 둡니다.
+
+`npm run bundle`은 커밋되지 않은 파일이 있으면 먼저 중단하도록 설계되어 있습니다. 현재 ZIP에는 기존 작업의 미커밋 변경이 있어 저장소를 깨끗하게 만들거나 다른 작업을 커밋하지 않고 실행한 결과는 해당 첫 오류를 그대로 기록해야 합니다. 로컬 테스트는 운영 복구나 심판 통과를 증명하지 않습니다.

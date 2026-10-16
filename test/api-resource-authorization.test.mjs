@@ -64,14 +64,14 @@ test('API checks persisted resource ownership before asking the decider about th
 });
 
 
-test('ID-less memo collection GET is denied and Stage 8 config lists only decider-allowed routes', async () => {
+test('ID-less memo collection GET is denied and Stage 10 config lists only decider-allowed routes', async () => {
   const notes = await readFile(new URL('../api/notes.js', import.meta.url), 'utf8');
   const memoHandlers = await readFile(new URL('../src/memo-api-handlers.mjs', import.meta.url), 'utf8');
   const config = JSON.parse(await readFile(new URL('../aleph.config.json', import.meta.url), 'utf8'));
   const contract = await readFile(new URL('../docs/DECIDER_REQUEST.md', import.meta.url), 'utf8');
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.match(memoHandlers, /COLLECTION_ROUTE_DENIED/u);
-  assert.equal(config.step, 8);
+  assert.equal(config.step, 10);
   assert.deepEqual(config.allowedRoutes, [
     'POST /api/notes', 'GET /api/notes/:id', 'PUT /api/notes/:id', 'DELETE /api/notes/:id',
     'GET /api/announcements', 'GET /api/announcements/:id',

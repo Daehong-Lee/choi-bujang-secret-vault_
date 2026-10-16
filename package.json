@@ -10,7 +10,10 @@
     "decider:test": "node scripts/decider-test.mjs",
     "detect:test": "node scripts/detect-test.mjs",
     "fixture:7": "node scripts/fixture-7.mjs",
-    "xdr:run": "node scripts/xdr-run.mjs"
+    "xdr:run": "node scripts/xdr-run.mjs",
+    "policy:diff": "node scripts/policy-recovery.mjs",
+    "policy:restore": "node scripts/policy-recovery.mjs --apply",
+    "test:recovery": "node --test test/policy-recovery.test.mjs test/memo-recovery.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
