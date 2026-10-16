@@ -16,12 +16,13 @@ const REQUEST_KEYS = [
 
 function hasValidRequestShape(request) {
   if (!request || typeof request !== 'object' || Array.isArray(request)) return false;
-  if (Object.keys(request).sort().join(',') !== REQUEST_KEYS) return false;
+  const requestKeys = Object.keys(request).sort().join(',');
+  const optionalRoleKeys = REQUEST_KEYS.split(',').filter(key => key !== 'actorRole').join(',');
+  if (requestKeys !== REQUEST_KEYS && requestKeys !== optionalRoleKeys) return false;
   if (request.schema !== 'aleph.decision.v1'
       || typeof request.requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(request.requestId)
       || typeof request.subjectId !== 'string' || !request.subjectId
       || typeof request.resourceOwnerSubjectId !== 'string' || !request.resourceOwnerSubjectId
-      || !['student', 'instructor'].includes(request.actorRole)
       || typeof request.deviceId !== 'string' || !/^[0-9a-f]{16}$/u.test(request.deviceId)
       || !Number.isInteger(request.queryLength) || request.queryLength !== 0
       || typeof request.querySha256 !== 'string' || !/^[0-9a-f]{64}$/u.test(request.querySha256)

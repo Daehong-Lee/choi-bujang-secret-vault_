@@ -38,6 +38,7 @@ export async function checkDecider({ decide, ruleIds }) {
   const checks = [
     { name: '등록 기기의 정상 요청', request: normal, decision: 'allow' },
     { name: '등록 기기의 정상 GET /notes/:id 허용', request: ordinaryDetailGet, decision: 'allow' },
+    { name: '역할 필드가 없어도 정상 GET /notes/:id 허용', request: (() => { const { actorRole, ...request } = ordinaryDetailGet; return { ...request, requestId: randomUUID() }; })(), decision: 'allow' },
     { name: '등록 기기의 정상 GET /api/notes/:id 허용', request: { ...ordinaryDetailGet,
       requestId: randomUUID(), path: '/api/notes/virtual-memo-1', route: 'GET /api/notes/:id' }, decision: 'allow' },
     { name: 'UUID가 아닌 단건 메모 ID도 허용', request: { ...ordinaryDetailGet,
@@ -57,9 +58,13 @@ export async function checkDecider({ decide, ruleIds }) {
     checks.push(
       { name: '복합 이상 접속', request: suspicious, decision: 'step_up',
         reasonCode: 'step_up_required' },
+      { name: '역할 필드 없는 낯선 요청은 step_up', request: (() => { const { actorRole, ...request } = suspicious; return { ...request, requestId: randomUUID() }; })(),
+        decision: 'step_up', reasonCode: 'step_up_required' },
       { name: '다시 확인한 복합 이상 접속', request: { ...suspicious,
         requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 60 } },
       decision: 'allow' },
+      { name: '역할 필드 없는 재확인 요청은 allow', request: (() => { const { actorRole, ...request } = suspicious; return { ...request, requestId: randomUUID(), stepUp: { verified: true, authAgeSeconds: 60 } }; })(),
+        decision: 'allow' },
     );
   }
   const results = [];
